@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HPT Assessment Tool</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    .fade { animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .rb { transition: all .12s ease; cursor: pointer; user-select: none; }
+    .rb:hover { transform: scale(1.08); }
+    .rb.on { transform: scale(1.14); box-shadow: 0 0 0 3px rgba(0,0,0,.18); }
+    .pbar { transition: width .35s ease; }
+    input:focus, textarea:focus { outline: 2px solid #0369a1; outline-offset: 1px; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .card { transition: box-shadow .18s; }
+    .card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.10); }
+    .exp-body { overflow: hidden; transition: max-height .35s ease; max-height: 0; }
+    .exp-body.open { max-height: 2000px; }
+    code { font-family: 'Courier New', monospace; font-size: 0.85em; }
+  @media print {
+    .no-print { display: none !important; }
+    .sticky { position: static !important; }
+    body { background: white !important; }
+    .pbar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .exp-body { max-height: none !important; }
+    .card:hover { box-shadow: none; }
+  }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div id="app"></div>
+<script>
+/* ════════════════════════════════════════════════════════════
+   SUPABASE CONFIG
+   Fill in your Project URL and anon key from supabase.com
+   These are set via the in-app setup wizard and saved locally.
+════════════════════════════════════════════════════════════ */
+let SUPABASE_URL = 'https://uhnuwktwwvskitgbzicz.supabase.co';
+let SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVobnV3a3R3d3Zza2l0Z2J6aWN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMjg5ODQsImV4cCI6MjA4OTkwNDk4NH0.9EZiWo07SjaMQphgjfV1DjuKlwVqR1Wzqj9BZKdE73M';
+let SB = null; // Supabase client — initialised after config check
+
+function initSupabase(){
+  if(SUPABASE_URL && SUPABASE_KEY){
+    SB = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    return true;
+  }
+  return false;
+}
+
+/* ════════════════════════════════════════════════════════════
+   DATA — 4 Pillars · 13 Factors · 79 Statements
+════════════════════════════════════════════════════════════ */
+const PILLARS = [
+  { id:'org_culture', name:'Org Culture', em:'🏛️', col:'#7c3aed', light:'#ede9fe',
+    factors:[
+      { id:'pioneers', name:'Pioneers',
+        def:'Our ability to innovate, embrace change, and learn from experimentation',
+        stmts:[
+          {id:'p1', t:'We regularly brainstorm and discuss unconventional ideas as part of our work process.',                            th:'Challenging the Status Quo'},
+          {id:'p2', t:'We regularly propose alternative solutions that challenge established processes, even when current methods appear to work adequately.', th:'Challenging the Status Quo'},
+          {id:'p3', t:'We are able to implement changes rapidly when needed.',                                                            th:'Agility & Speed of Change'},
+          {id:'p4', t:'When faced with a problem, my first instinct is to explore new approaches rather than rely on previous solutions.',th:'Agility & Speed of Change'},
+          {id:'p5', t:'I view unsuccessful attempts as valuable learning opportunities and quickly pivot to alternative approaches.',      th:'Learning from Experimentation'},
+          {id:'p6', t:'We wait for problems before looking to change.', rev:true,                                                        th:'Learning from Experimentation'},
+        ]},
+      { id:'wellbeing', name:'Wellbeing',
+        def:'How we care for our people — their development, safety, and sense of belonging',
+        stmts:[
+          {id:'w1', t:'Our organisation consistently invests time and resources in employee development programmes.',                    th:'Investment in People'},
+          {id:'w2', t:'The training and development I receive are specific to my needs.',                                               th:'Investment in People'},
+          {id:'w3', t:'Our leadership approach emphasises empathy and understanding towards team members\'s needs.',                     th:'Empathy & Open Culture'},
+          {id:'w4', t:'Our team environment encourages open discussion about both work and personal challenges.',                        th:'Empathy & Open Culture'},
+          {id:'w5', t:'We look out for each other\'s safety and wellbeing.',                                                            th:'Safety & Inclusion'},
+          {id:'w6', t:'Our workplace actively promotes an inclusive environment where everyone feels valued and respected.',             th:'Safety & Inclusion'},
+          {id:'w7', t:'I demonstrate genuine interest in my team members\' wellbeing and maintain awareness of their work-life balance.',th:'Safety & Inclusion'},
+        ]},
+      { id:'achievements', name:'Achievements',
+        def:'Our track record of delivering results and meeting our commitments to customers and stakeholders',
+        stmts:[
+          {id:'ac1', t:'We regularly gather and act upon customer feedback to ensure our deliverables meet or exceed expectations.',     th:'Customer Focus'},
+          {id:'ac2', t:'We take time to recognise and celebrate both individual and team achievements across all levels of the organisation.', th:'Recognition & Celebration'},
+          {id:'ac3', t:'We consistently achieve our daily production targets while maintaining the highest standards of safety and quality.', th:'Delivery Standards'},
+          {id:'ac4', t:'We prioritise customer satisfaction in our day-to-day work decisions.',                                         th:'Customer Focus'},
+        ]},
+      { id:'internal_ops', name:'Internal Operations',
+        def:'The quality and consistency of our processes, systems, and ways of working',
+        stmts:[
+          {id:'io1', t:'We have continuity in our systems and structures across the business.',                                         th:'Systems & Consistency'},
+          {id:'io2', t:'Our communication tools and platforms are user-friendly and well-integrated into our daily work.',              th:'Communication Infrastructure'},
+          {id:'io3', t:'Our communication systems effectively facilitate collaboration across different teams and departments.',          th:'Communication Infrastructure'},
+          {id:'io4', t:'We consistently follow established protocols and procedures across all our administrative processes and documentation.', th:'Systems & Consistency'},
+          {id:'io5', t:'Safety considerations are integrated into all aspects of our daily operations.',                                th:'Safety Culture'},
+        ]},
+    ]},
+  { id:'leadership', name:'Leadership', em:'🎯', col:'#0369a1', light:'#e0f2fe',
+    factors:[
+      { id:'purpose', name:'Purpose',
+        def:'How well leadership creates shared meaning, direction, and alignment across the team',
+        stmts:[
+          {id:'pu1', t:'I have a clear understanding of our Guiding Principles and how to apply them in my work.',                     th:'Strategic Alignment'},
+          {id:'pu2', t:'My team\'s objectives are well-aligned with our Division\'s overall purpose.',                                 th:'Strategic Alignment'},
+          {id:'pu3', t:'The connection between Group direction and our Division\'s purpose is clear to me.',                           th:'Strategic Alignment'},
+          {id:'pu4', t:'The One Team approach is well-defined and consistently practised across our organisation.',                    th:'Role & Contribution Clarity'},
+          {id:'pu5', t:'I understand my specific role and responsibilities in helping achieve our goals.',                             th:'Role & Contribution Clarity'},
+          {id:'pu6', t:'I understand how my work contributes to supporting clients\' targets.',                                        th:'Role & Contribution Clarity'},
+          {id:'pu7', t:'Leadership regularly communicates and reinforces our organisational purpose and direction.',                   th:'Leadership Communication'},
+        ]},
+      { id:'support', name:'Support',
+        def:'The degree to which individuals feel supported, valued, and enabled to succeed',
+        stmts:[
+          {id:'s1', t:'I feel comfortable seeking support from my colleagues and leaders when needed.',                                th:'Peer & Colleague Support'},
+          {id:'s2', t:'Team members proactively support each other in achieving our collective goals.',                                th:'Peer & Colleague Support'},
+          {id:'s3', t:'Individual and team achievements are regularly recognised and celebrated.',                                     th:'Recognition & Value'},
+          {id:'s4', t:'I feel valued and appreciated for my contributions to the team.',                                              th:'Recognition & Value'},
+          {id:'s5', t:'I create opportunities for my team to stretch their capabilities and take on challenging assignments that promote growth.', th:'Development Support'},
+          {id:'s6', t:'I consistently dedicate time to understand my team members\' career aspirations and development goals.',        th:'Development Support'},
+        ]},
+      { id:'challenge', name:'Challenge',
+        def:'How well we stretch, develop, and push each other to improve and grow',
+        stmts:[
+          {id:'ch1', t:'I feel comfortable giving constructive feedback to colleagues and leaders.',                                   th:'Feedback Culture'},
+          {id:'ch2', t:'My line manager and I are on the same wavelength regarding the areas of my work that I need to improve.',     th:'Feedback Culture'},
+          {id:'ch3', t:'I receive regular feedback (formally and informally) on my performance and progress towards my goals.',        th:'Feedback Culture'},
+          {id:'ch4', t:'Feedback discussions lead to actionable improvements in our work.',                                           th:'Feedback Culture'},
+          {id:'ch5', t:'Our team has effective processes for sharing feedback with each other.',                                      th:'Goal Clarity & Stretch'},
+          {id:'ch6', t:'Our team has well-defined goals that align with our overall objectives.',                                     th:'Goal Clarity & Stretch'},
+        ]},
+    ]},
+  { id:'great_people', name:'Great People', em:'👥', col:'#059669', light:'#d1fae5',
+    factors:[
+      { id:'attitudes', name:'Attitudes',
+        def:'The mindset, resilience, and spirit our people bring to their work',
+        stmts:[
+          {id:'at1', t:'Our team approaches work challenges with a positive attitude and a sense of unity.',                           th:'Resilience & Positivity'},
+          {id:'at2', t:'Our team shows resilience and adaptability by quickly bouncing back from setbacks.',                           th:'Resilience & Positivity'},
+          {id:'at3', t:'Our team maintains a positive attitude even when facing significant challenges.',                              th:'Resilience & Positivity'},
+          {id:'at4', t:'I actively contribute ideas and support to help the team overcome obstacles.',                                th:'Active Contribution'},
+          {id:'at5', t:'I can see the positive impact our team makes despite difficult circumstances.',                               th:'Active Contribution'},
+        ]},
+      { id:'behaviours', name:'Behaviours',
+        def:'How our people act day-to-day — reflecting our values in the way we work together',
+        stmts:[
+          {id:'be1', t:'Our team regularly reflects on and learns from both successes and failures.',                                  th:'Reflection & Learning'},
+          {id:'be2', t:'We actively seek ways to positively impact the communities we work in.',                                      th:'Collaboration & Impact'},
+          {id:'be3', t:'I regularly assess and reflect on my daily efforts to improve and collaborate with others.',                  th:'Reflection & Learning'},
+          {id:'be4', t:'We consistently prioritise client needs and deliver on our promises.',                                        th:'Accountability & Delivery'},
+          {id:'be5', t:'We take responsibility for our actions and their impact on colleagues and clients.',                          th:'Accountability & Delivery'},
+          {id:'be6', t:'Team members openly share concerns and solutions in a constructive manner.',                                   th:'Collaboration & Impact'},
+          {id:'be7', t:'I actively foster open collaboration within the team.',                                                       th:'Collaboration & Impact'},
+          {id:'be8', t:'I could comfortably provide examples of how I strive to improve every day.',                                  th:'Accountability & Delivery'},
+        ]},
+      { id:'capabilities', name:'Capabilities',
+        def:'The skills, knowledge, and expertise our people have and continue to develop',
+        stmts:[
+          {id:'ca1', t:'We provide comprehensive training and development opportunities for our team members.',                        th:'Development Investment'},
+          {id:'ca2', t:'Our organisation effectively identifies and attracts people who align with our values.',                       th:'Development Investment'},
+          {id:'ca3', t:'Our team members consistently demonstrate a curious and open-minded approach to work.',                       th:'Empowerment & Growth'},
+          {id:'ca4', t:'I have the freedom to use my expertise to find the best solutions to challenges.',                            th:'Empowerment & Growth'},
+          {id:'ca5', t:'I feel empowered to develop and apply both my technical and interpersonal skills.',                           th:'Empowerment & Growth'},
+        ]},
+    ]},
+  { id:'perf_fuel', name:'Performance Fuel', em:'⚡', col:'#b45309', light:'#fef3c7',
+    factors:[
+      { id:'clarity', name:'Clarity',
+        def:'How clear people are about goals, progress, roles, and what success looks like',
+        stmts:[
+          {id:'cl1', t:'I have a good understanding of our team\'s current position in relation to our goals.',                       th:'Goals & Progress Visibility'},
+          {id:'cl2', t:'Regular progress reviews help us stay on track and adjust our approach when needed.',                         th:'Goals & Progress Visibility'},
+          {id:'cl3', t:'We actively identify and implement opportunities for daily improvement.',                                     th:'Goals & Progress Visibility'},
+          {id:'cl4', t:'I can clearly articulate the specific actions our team needs to take to achieve our goals as well as the key measures that indicate progress.', th:'Role & Action Clarity'},
+          {id:'cl5', t:'Our team meetings frequently reinforce and discuss progress towards our strategic objectives.',               th:'Goals & Progress Visibility'},
+          {id:'cl6', t:'Individual and team goals are regularly reviewed and updated.',                                               th:'Information Flow'},
+          {id:'cl7', t:'Important information is consistently shared in a timely and clear manner.',                                  th:'Information Flow'},
+          {id:'cl8', t:'My role within the team is clearly defined and I understand the expectations of my role and my specific responsibilities.', th:'Role & Action Clarity'},
+        ]},
+      { id:'tools', name:'Tools',
+        def:'The quality and availability of the resources, technology, and equipment people need to perform effectively',
+        stmts:[
+          {id:'t1', t:'The company provides adequate tangible resources (e.g., tools, technology, training) to help me perform my job.', th:'Access to Resources'},
+          {id:'t2', t:'I have access to the resources, tools, and information needed to perform my role effectively.',                 th:'Access to Resources'},
+          {id:'t3', t:'Our communication networks effectively support information sharing across teams.',                              th:'Technology & Systems'},
+          {id:'t4', t:'The technology and tools provided are up-to-date and well-maintained.',                                        th:'Technology & Systems'},
+          {id:'t5', t:'I have access to all the equipment and technology required to perform my job effectively and safely.',         th:'Access to Resources'},
+        ]},
+      { id:'motivation', name:'Motivation',
+        def:'What drives and energises people to give their best — intrinsically and as a team',
+        stmts:[
+          {id:'m1', t:'Our team is known for being collaborative and easy to work with.',                                             th:'Team Cohesion'},
+          {id:'m2', t:'There is a strong sense of connection and camaraderie among team members.',                                    th:'Team Cohesion'},
+          {id:'m3', t:'Our team consistently delivers results while maintaining a positive work environment.',                        th:'Team Cohesion'},
+          {id:'m4', t:'I experience genuine job satisfaction in my current position.',                                                th:'Personal Satisfaction & Autonomy'},
+          {id:'m5', t:'I have the autonomy to choose how I approach my work tasks.',                                                  th:'Personal Satisfaction & Autonomy'},
+          {id:'m6', t:'I take genuine pride in the work I do and its outcomes.',                                                      th:'Personal Satisfaction & Autonomy'},
+          {id:'m7', t:'Training and development programmes are well-matched to our team\'s needs.',                                   th:'Development Match'},
+        ]},
+    ]},
+];
+
+const ALL_FACTORS = PILLARS.flatMap(p => p.factors.map(f => ({...f, pid:p.id, pname:p.name, pcol:p.col, plight:p.light, pem:p.em})));
+const ALL_STMTS   = ALL_FACTORS.flatMap(f => f.stmts.map(s => ({...s, fid:f.id, fname:f.name, pname:f.pname})));
+
+/* ════════════════════════════════════════════════════════════
+   INTERVENTIONS
+════════════════════════════════════════════════════════════ */
+const INTV = {
+  pioneers: {
+    ss:['Position your team as the innovation engine for the wider organisation — share your experimentation approach and make it visible.',
+        'Give your pioneers a platform: showcase your new approaches at team and organisational events to inspire others.',
+        'Use your innovation culture to attract talent — make it a centrepiece of how you talk about what it\'s like to work here.'],
+    s: ['Run monthly "What If?" sessions — structured creative problem-solving around live challenges.',
+        'Introduce a fast-fail protocol: small experiments with a 2-week review and a no-blame debrief.',
+        'Create a lessons-learned library where unsuccessful attempts are documented as valuable data points.'],
+    r: ['What one experiment could we run in the next 30 days without needing approval?',
+        'When did we last deliberately challenge a process that "works fine"?',
+        'What fear or habit is stopping us from trying new approaches?'] },
+  wellbeing: {
+    ss:['Use your strong wellbeing foundation to take on higher-challenge work — psychologically safe teams take bigger risks and stretch further.',
+        'Make your wellbeing culture a visible differentiator — share what you do well with other teams and leaders.',
+        'Give team members the chance to mentor others on how you\'ve built psychological safety and inclusion.'],
+    s: ['Run a brief weekly check-in (15 mins) focused specifically on energy levels and personal challenges.',
+        'Review workload distribution monthly to spot overload before it becomes burnout.',
+        'Establish informal peer support pairs within the team for low-pressure ongoing support.'],
+    r: ['What would people need to feel 10% more supported in this team?',
+        'Are we having the right conversations, or just the safe ones?',
+        'Who in our team might be struggling right now that we haven\'t noticed?'] },
+  achievements: {
+    ss:['Use your delivery track record to take on more ambitious targets — this team has proven it can deliver.',
+        'Document your success stories and share them with senior stakeholders — your achievements deserve wider visibility.',
+        'Leverage your customer focus to deepen client relationships and create new opportunities beyond your current scope.'],
+    s: ['Establish a monthly wins board — physical or digital — visible to all team members.',
+        'Introduce customer feedback as a standing agenda item in team meetings.',
+        'Define 3 clear KPIs the whole team owns and can track in real time.'],
+    r: ['What achievement this quarter are we most proud of — and did we celebrate it properly?',
+        'What does a "great week" look like for our team?',
+        'Are we clear on what customers actually value, or what we think they value?'] },
+  internal_ops: {
+    ss:['Export your operational playbook — other teams could benefit from your consistency and rigour.',
+        'Use your strong processes as a competitive advantage when pitching for new work or demonstrating organisational health.',
+        'Build on your operational foundation by introducing continuous improvement cycles — your processes are solid enough to innovate within.'],
+    s: ['Conduct a process audit: map your top 5 recurring workflows and identify friction points.',
+        'Create a simple team playbook for your most common cross-team interactions.',
+        'Run a safety moment at the start of each team meeting to keep safety front of mind.'],
+    r: ['Which process wastes the most time and could be simplified this week?',
+        'Do our systems help us work, or do we work around our systems?',
+        'Are protocols followed because people understand why, or because they have to?'] },
+  purpose: {
+    ss:['Your sense of purpose is a multiplier — use it to energise people through periods of difficulty or change.',
+        'Make your team\'s purpose story visible externally: clients and partners respond to teams who know their "why".',
+        'Help other teams clarify their purpose by sharing how yours was developed and how it guides daily decisions.'],
+    s: ['Create a one-page "our story" document connecting team activity to the Division\'s purpose.',
+        'Open each team meeting with a 2-minute "why it matters" moment — a client story, impact update, or milestone.',
+        'Review team objectives quarterly with explicit links to wider organisational direction.'],
+    r: ['Could every team member articulate our purpose in their own words right now?',
+        'What decisions do we make day-to-day that feel disconnected from our purpose?',
+        'What would change if people felt more connected to the "why" of their work?'] },
+  support: {
+    ss:['Your supportive culture is a retention and attraction asset — make sure people know it\'s a feature of working in this team.',
+        'Channel your support culture into structured mentoring or buddy programmes that benefit newer team members.',
+        'Use the psychological safety you\'ve built to take on more ambitious, stretching challenges as a team.'],
+    s: ['Build structured 1-2-1s into every manager\'s week — not just for performance, but for genuine connection.',
+        'Introduce a team recognition ritual: end each weekly meeting with one peer shout-out.',
+        'Normalise "I need help" — leaders modelling vulnerability is the fastest way to maintain psychological safety.'],
+    r: ['What stops people asking for help in this team?',
+        'Who in the team is least likely to ask for support — and why?',
+        'What would it look like if this team truly had each other\'s backs?'] },
+  challenge: {
+    ss:['Your feedback culture is rare — export it. Run feedback skills sessions for other teams or leaders.',
+        'Use your goal clarity as a springboard for more ambitious performance targets — people know what they\'re aiming for.',
+        'Build on strong feedback foundations by introducing peer coaching pairs for ongoing developmental conversations.'],
+    s: ['Introduce structured developmental feedback using a simple Start / Stop / Continue framework.',
+        'Create a team growth-goals document where each person identifies one stretch area per quarter.',
+        'Train line managers in coaching conversations — shifting from telling to questioning.'],
+    r: ['When did you last give someone feedback that genuinely challenged them?',
+        'Do people in this team feel stretched — or just busy?',
+        'What\'s the gap between where people are now and where they could be in 12 months?'] },
+  attitudes: {
+    ss:['Your resilience is a team superpower — make it part of how you tell your story to the wider organisation.',
+        'Use your positive attitude as a stabilising force: this team can take on the most challenging projects.',
+        'Celebrate your resilience explicitly — name it, own it, and let it become part of your team identity.'],
+    s: ['Introduce a resilience check-in after major setbacks — focused on learning, not blame.',
+        'Develop a shared language around adversity — making it part of the team\'s identity and story.',
+        'Celebrate comebacks and recoveries as loudly as you celebrate wins.'],
+    r: ['What\'s our team narrative when things get hard — victim or architect?',
+        'What does our team do that reliably restores energy after a tough period?',
+        'Who in the team models the attitude we want more of?'] },
+  behaviours: {
+    ss:['Your behavioural consistency is a trust asset — clients and colleagues know what to expect from this team.',
+        'Use your reflective culture to model continuous improvement for the wider organisation.',
+        'Your accountability culture is rare — lean into it as a differentiator when competing for high-profile work.'],
+    s: ['Run quarterly team retrospectives: What worked? What didn\'t? What will we do differently?',
+        'Co-create a team charter that translates values into specific, observable behaviours.',
+        'Introduce peer accountability: each person commits to one behaviour change per month.'],
+    r: ['Are our values visible in how we behave under pressure, or only when things are easy?',
+        'What behaviour, if everyone adopted it, would have the biggest impact?',
+        'Are we learning from our successes as rigorously as we learn from our failures?'] },
+  capabilities: {
+    ss:['Use your strong capability base to take on scope beyond your current remit — this team is ready.',
+        'Your development culture is an attraction magnet — make it explicit in how you recruit and onboard.',
+        'Create internal teaching opportunities: your most capable people developing others multiplies your impact.'],
+    s: ['Run a capabilities mapping exercise: where are we strong, where are the gaps, what\'s the plan?',
+        'Create internal learning sprints — short, focused peer-to-peer knowledge sharing sessions.',
+        'Protect time for capability development — it needs to be in the diary, not aspirational.'],
+    r: ['What capability, if we built it, would change our performance most?',
+        'Are people growing in this team, or just maintaining?',
+        'What expertise exists in the team that we\'re not fully utilising?'] },
+  clarity: {
+    ss:['Your clarity on goals and roles frees cognitive energy for bigger thinking — use it to take on more complex challenges.',
+        'Share your goal-setting and progress-tracking approach with other teams as a template.',
+        'Build on strong clarity foundations by introducing more stretching, longer-horizon targets.'],
+    s: ['Introduce a weekly one-page team dashboard: goals, progress, blockers, and next actions.',
+        'Run role clarity conversations: each person articulates their top 3 responsibilities and gets peer validation.',
+        'Make progress visible — a shared tracker that everyone can see and update.'],
+    r: ['Could every team member describe the team\'s top 3 priorities right now?',
+        'Where does ambiguity exist — and is that slowing us down?',
+        'What would better information flow look like for people in this team?'] },
+  tools: {
+    ss:['Your resource base is a performance enabler — capitalise on it by taking on more technically demanding work.',
+        'Share your technology and systems knowledge with other teams who might be less well-equipped.',
+        'Use your strong tool foundation to drive efficiency — what could you automate or streamline next?'],
+    s: ['Run a friction audit: ask team members to log every time they\'re blocked by a tool or resource gap.',
+        'Identify quick wins — tools or equipment that could be upgraded at low cost.',
+        'Ensure people know how to fully use the tools they have — training gaps often masquerade as tool gaps.'],
+    r: ['What\'s the one resource constraint that, if removed, would make the biggest difference?',
+        'Are we using our current tools to their full potential?',
+        'What are people working around that they shouldn\'t have to?'] },
+  motivation: {
+    ss:['Your motivated, connected team is your biggest asset — protect it fiercely as you grow and change.',
+        'Use your strong team identity to take on high-profile, visible projects that match your energy.',
+        'Channel your camaraderie into external impact — motivated teams change the environments around them.'],
+    s: ['Connect individual role to team impact — help people see the difference their work makes.',
+        'Create space for autonomy: give individuals more ownership over how (not just what) they deliver.',
+        'Foster team identity through shared experiences, stories, and rituals that build belonging.'],
+    r: ['What genuinely motivates the people in this team — and are we providing it?',
+        'What\'s draining energy in this team that we could address?',
+        'What would it take for people to say this is the best team they\'ve ever been part of?'] },
+};
+
+/* ════════════════════════════════════════════════════════════
+   IN-MEMORY STATE (loaded from Supabase on boot)
+════════════════════════════════════════════════════════════ */
+let ENGAGEMENTS = [];
+let RESPONSES   = [];
+
+async function loadData(){
+  const [{ data:engs, error:e1 }, { data:resps, error:e2 }] = await Promise.all([
+    SB.from('engagements').select('*').order('ts',{ascending:false}),
+    SB.from('responses').select('*').order('ts',{ascending:true}),
+  ]);
+  if(e1||e2) throw e1||e2;
+  ENGAGEMENTS = (engs||[]).map(normaliseEng);
+  RESPONSES   = (resps||[]).map(normaliseResp);
+}
+
+// Map DB snake_case → JS camelCase
+function normaliseEng(e){ return {...e, parentId:e.parent_id}; }
+function normaliseResp(r){ return {...r, engId:r.eng_id}; }
+
+/* ════════════════════════════════════════════════════════════
+   SCORING
+════════════════════════════════════════════════════════════ */
+function computeScores(responses){
+  const out={};
+  PILLARS.forEach(p=>{
+    out[p.id]={name:p.name,col:p.col,em:p.em,factors:{},avg:0};
+    let ps=[];
+    p.factors.forEach(f=>{
+      let scores=[];
+      f.stmts.forEach(s=>responses.forEach(r=>{
+        const v=r.ratings[s.id];
+        if(v!=null) scores.push(s.rev?(7-v):v);
+      }));
+      const avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:0;
+      out[p.id].factors[f.id]={name:f.name,score:avg};
+      ps.push(avg);
+    });
+    out[p.id].avg=ps.length?ps.reduce((a,b)=>a+b,0)/ps.length:0;
+  });
+  return out;
+}
+
+function stmtAvgs(responses){
+  const out={};
+  ALL_STMTS.forEach(s=>{
+    const vals=responses.map(r=>r.ratings[s.id]).filter(v=>v!=null).map(v=>s.rev?(7-v):v);
+    out[s.id]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  });
+  return out;
+}
+
+function rankedFactors(scores){
+  return PILLARS.flatMap(p=>p.factors.map(f=>({
+    fid:f.id,fname:f.name,pid:p.id,pname:p.name,pcol:p.col,
+    score:scores[p.id]?.factors[f.id]?.score??0,
+  }))).sort((a,b)=>b.score-a.score);
+}
+
+function relCol(rank,total){
+  if(rank<total*0.31) return {bg:'#dcfce7',tx:'#166534',bd:'#86efac',lbl:'Strength',tier:'strength'};
+  if(rank<total*0.70) return {bg:'#fef9c3',tx:'#854d0e',bd:'#fde047',lbl:'Developing',tier:'dev'};
+  return {bg:'#fee2e2',tx:'#991b1b',bd:'#fca5a5',lbl:'Work-On',tier:'workon'};
+}
+
+function themeBreakdown(fid,stmtAvgMap){
+  const factor=ALL_FACTORS.find(f=>f.id===fid);
+  if(!factor) return [];
+  const themes={};
+  factor.stmts.forEach(s=>{
+    const v=stmtAvgMap[s.id]; if(v==null) return;
+    if(!themes[s.th]) themes[s.th]={name:s.th,scores:[],stmts:[]};
+    themes[s.th].scores.push(v);
+    themes[s.th].stmts.push({text:s.t,score:v});
+  });
+  return Object.values(themes).map(th=>({
+    name:th.name,
+    avg:th.scores.reduce((a,b)=>a+b,0)/th.scores.length,
+    stmts:th.stmts.sort((a,b)=>a.score-b.score),
+  })).sort((a,b)=>a.avg-b.avg);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ALIGNMENT, SPOTLIGHT & NARRATIVE
+════════════════════════════════════════════════════════════ */
+function factorAlignment(fid, resps){
+  const vals = resps.map(r => respFactorScore(fid, r)).filter(v => v !== null);
+  if(vals.length < 2) return null;
+  const mean = vals.reduce((a,b) => a+b, 0) / vals.length;
+  const sd   = Math.sqrt(vals.reduce((a,b) => a+(b-mean)**2, 0) / (vals.length-1));
+  if(sd < 0.8)  return {lbl:'Aligned', col:'#0369a1', bg:'#e0f2fe', icon:'●'};
+  if(sd < 1.3)  return {lbl:'Mixed',   col:'#ca8a04', bg:'#fef9c3', icon:'●'};
+  return              {lbl:'Divided',  col:'#dc2626', bg:'#fee2e2', icon:'●'};
+}
+
+function lowestStmt(fid, avgMap){
+  const f = ALL_FACTORS.find(x => x.id === fid);
+  if(!f) return null;
+  return f.stmts
+    .map(s => ({text: s.t, score: avgMap[s.id] ?? null}))
+    .filter(s => s.score !== null)
+    .sort((a,b) => a.score - b.score)[0] || null;
+}
+
+function generateNarrative(eng, resps, scores, ranked, total){
+  const pRanked = PILLARS.map(p => ({name:p.name, em:p.em, avg:scores[p.id].avg})).sort((a,b)=>b.avg-a.avg);
+  const best = pRanked[0], worst = pRanked[pRanked.length-1];
+  const gap  = (best.avg - worst.avg).toFixed(1);
+  const topF = ranked[0], botF = ranked[ranked.length-1];
+  const divided = ranked.filter(f => { const a=factorAlignment(f.fid,resps); return a&&a.lbl==='Divided'; });
+  const nStr = ranked.filter((_,i) => relCol(i,total).tier==='strength').length;
+  const nWO  = ranked.filter((_,i) => relCol(i,total).tier==='workon').length;
+
+  let s = `This team's standout capability is <strong>${best.em} ${best.name}</strong> (${best.avg.toFixed(1)}/6), with <strong>${topF.fname}</strong> as the highest-scoring factor across all ${total} areas. `;
+  s += `The primary development opportunity sits in <strong>${worst.em} ${worst.name}</strong> (${worst.avg.toFixed(1)}/6) — <strong>${botF.fname}</strong> is the factor most in need of attention. `;
+  if(parseFloat(gap) >= 1.2) s += `The ${gap}-point gap between the strongest and weakest pillar is significant and warrants strategic focus. `;
+  if(divided.length > 0){
+    const names = divided.slice(0,2).map(f=>`<strong>${f.fname}</strong>`).join(' and ');
+    s += `Notably, the data reveals <strong>divided views</strong> on ${names} — where team members are having fundamentally different experiences. This is the most important thread to pull in facilitation.`;
+  } else {
+    s += `The team shows broadly consistent views across factors, suggesting a shared experience — a useful foundation for collective development.`;
+  }
+  return `<div class="bg-gradient-to-br from-blue-50 to-slate-50 rounded-2xl border border-blue-100 p-5">
+    <div class="flex gap-3">
+      <span class="text-2xl shrink-0">💡</span>
+      <div>
+        <h2 class="font-bold text-slate-800 text-sm mb-1.5">Team Snapshot — ${eng.name}</h2>
+        <p class="text-slate-600 text-sm leading-relaxed">${s}</p>
+        <div class="flex gap-4 mt-3 pt-3 border-t border-blue-100 text-xs text-slate-500">
+          <span><strong class="text-green-700">${nStr}</strong> Strength${nStr!==1?'s':''}</span>
+          <span><strong class="text-amber-600">${total-nStr-nWO}</strong> Developing</span>
+          <span><strong class="text-red-700">${nWO}</strong> Work-On${nWO!==1?'s':''}</span>
+          <span><strong class="text-slate-700">${resps.length}</strong> respondent${resps.length!==1?'s':''}</span>
+          ${divided.length>0?`<span class="text-red-600 font-semibold">⚠ ${divided.length} divided factor${divided.length!==1?'s':''}</span>`:''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   MATURITY MODEL
+════════════════════════════════════════════════════════════ */
+function maturity(score){
+  if(score<2) return {lbl:'Underpower',col:'#dc2626',bg:'#fee2e2'};
+  if(score<3) return {lbl:'Developing', col:'#f97316',bg:'#ffedd5'};
+  if(score<4) return {lbl:'Defined',    col:'#ca8a04',bg:'#fef9c3'};
+  if(score<5) return {lbl:'Advanced',   col:'#16a34a',bg:'#dcfce7'};
+  return             {lbl:'Exemplary',  col:'#0369a1',bg:'#e0f2fe'};
+}
+
+/* ════════════════════════════════════════════════════════════
+   STATISTICS — Welch's t-test
+════════════════════════════════════════════════════════════ */
+function gammaLn(x){
+  const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,1.208650973866179e-3,-5.395239384953e-6];
+  let y=x,tmp=(x+0.5)*Math.log(x+5.5)-(x+5.5),ser=1.000000000190015;
+  for(let j=0;j<6;j++) ser+=c[j]/++y;
+  return tmp+Math.log(2.5066282746310005*ser/x);
+}
+function betaInc(x,a,b){
+  if(x<=0)return 0; if(x>=1)return 1;
+  const lbeta=gammaLn(a)+gammaLn(b)-gammaLn(a+b);
+  const bt=Math.exp(a*Math.log(x)+b*Math.log(1-x)-lbeta);
+  const EPS=3e-7,FPMIN=1e-30,MAXIT=200;
+  function cf(x,a,b){
+    let c=1,d=1-(a+b)*x/(a+1);
+    if(Math.abs(d)<FPMIN)d=FPMIN; d=1/d; let h=d;
+    for(let m=1;m<=MAXIT;m++){
+      let aa=m*(b-m)*x/((a+2*m-1)*(a+2*m));
+      d=1+aa*d;if(Math.abs(d)<FPMIN)d=FPMIN;c=1+aa/c;if(Math.abs(c)<FPMIN)c=FPMIN;d=1/d;h*=d*c;
+      aa=-(a+m)*(a+b+m)*x/((a+2*m)*(a+2*m+1));
+      d=1+aa*d;if(Math.abs(d)<FPMIN)d=FPMIN;c=1+aa/c;if(Math.abs(c)<FPMIN)c=FPMIN;d=1/d;
+      const del=d*c;h*=del;if(Math.abs(del-1)<EPS)break;
+    }
+    return h;
+  }
+  return x<(a+1)/(a+b+2)?bt*cf(x,a,b)/a:1-bt*cf(1-x,b,a)/b;
+}
+function tPVal(t,df){ return betaInc(df/(df+t*t),df/2,0.5); }
+function respFactorScore(fid,resp){
+  const f=ALL_FACTORS.find(x=>x.id===fid);
+  const vals=f.stmts.map(s=>{const v=resp.ratings[s.id];return v!=null?(s.rev?7-v:v):null;}).filter(v=>v!=null);
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+}
+function welchTest(fid,respsA,respsB){
+  const a=respsA.map(r=>respFactorScore(fid,r)).filter(v=>v!=null);
+  const b=respsB.map(r=>respFactorScore(fid,r)).filter(v=>v!=null);
+  if(a.length<2||b.length<2) return null;
+  const n1=a.length,n2=b.length;
+  const m1=a.reduce((s,v)=>s+v,0)/n1,m2=b.reduce((s,v)=>s+v,0)/n2;
+  const v1=a.reduce((s,v)=>s+(v-m1)**2,0)/(n1-1),v2=b.reduce((s,v)=>s+(v-m2)**2,0)/(n2-1);
+  const se=Math.sqrt(v1/n1+v2/n2);
+  if(se<1e-10) return {p:1,d:0,n1,n2};
+  const t=(m2-m1)/se;
+  const df=(v1/n1+v2/n2)**2/((v1/n1)**2/(n1-1)+(v2/n2)**2/(n2-1));
+  const p=tPVal(Math.abs(t),Math.max(df,1));
+  const sp=Math.sqrt(((n1-1)*v1+(n2-1)*v2)/(n1+n2-2));
+  return {p,d:sp>0?Math.abs(m2-m1)/sp:0,n1,n2};
+}
+function sigBadge(stat){
+  if(!stat) return `<span class="text-slate-300 text-[10px]">—</span>`;
+  if(stat.p<0.05) return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 cursor-help" title="Significant: p=${stat.p.toFixed(3)}, n=${stat.n1}→${stat.n2}, d=${stat.d.toFixed(2)}">★ sig.</span>`;
+  if(stat.p<0.10) return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 cursor-help" title="Near significant: p=${stat.p.toFixed(3)}, n=${stat.n1}→${stat.n2}">~ near</span>`;
+  return `<span class="text-[10px] text-slate-400 cursor-help" title="Not significant: p=${stat.p.toFixed(3)}">ns</span>`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHAIN HELPERS
+════════════════════════════════════════════════════════════ */
+function chainRootId(engId){
+  let e=ENGAGEMENTS.find(x=>x.id===engId);
+  while(e&&e.parentId){const p=ENGAGEMENTS.find(x=>x.id===e.parentId);if(!p)break;e=p;}
+  return e?e.id:engId;
+}
+function buildChain(rootId){
+  const root=ENGAGEMENTS.find(e=>e.id===rootId);
+  if(!root) return [];
+  const chain=[root]; let cur=root;
+  while(true){const next=ENGAGEMENTS.find(e=>e.parentId===cur.id);if(!next)break;chain.push(next);cur=next;}
+  return chain;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CSV EXPORT
+════════════════════════════════════════════════════════════ */
+function exportCSV(eng){
+  const resps=RESPONSES.filter(r=>r.engId===eng.id);
+  const hdrs=['Respondent #','Date','Pillar','Factor','Theme','Statement','Raw Rating','Adjusted Rating'];
+  const rows=[hdrs.join(',')];
+  resps.forEach((r,i)=>{
+    ALL_STMTS.forEach(s=>{
+      const raw=r.ratings[s.id]??'';
+      const adj=raw!==''?(s.rev?(7-raw):raw):'';
+      rows.push([`"Respondent ${i+1}"`,`"${new Date(r.ts).toLocaleDateString('en-GB')}"`,
+        `"${s.pname}"`,`"${s.fname}"`,`"${s.th}"`,`"${s.t.replace(/"/g,'""')}"`,raw,adj].join(','));
+    });
+  });
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'})),download:`HPT_${eng.name}_${new Date().toISOString().slice(0,10)}.csv`});
+  a.click();
+}
+
+/* ════════════════════════════════════════════════════════════
+   SVG RADAR
+════════════════════════════════════════════════════════════ */
+function radarSVG(pillars,scores,size=220){
+  const cx=size/2,cy=size/2,r=size*0.33,n=pillars.length;
+  const grids=[.25,.5,.75,1].map(f=>`<circle cx="${cx}" cy="${cy}" r="${(r*f).toFixed(1)}" fill="none" stroke="#e2e8f0"/>`).join('');
+  const axes=pillars.map((_,i)=>{const a=(i/n)*2*Math.PI-Math.PI/2,x=cx+r*Math.cos(a),y=cy+r*Math.sin(a);return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e2e8f0"/>`;}).join('');
+  const pts=pillars.map((p,i)=>{const a=(i/n)*2*Math.PI-Math.PI/2,dr=(scores[p.id].avg/6)*r;return `${(cx+dr*Math.cos(a)).toFixed(1)},${(cy+dr*Math.sin(a)).toFixed(1)}`;}).join(' ');
+  const lbls=pillars.map((p,i)=>{const a=(i/n)*2*Math.PI-Math.PI/2,lr=r+24,x=cx+lr*Math.cos(a),y=cy+lr*Math.sin(a);const words=p.name.split(' ');return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="10" fill="#475569">${words.map((w,wi)=>`<tspan x="${x.toFixed(1)}" dy="${wi===0?(words.length>1?'-0.5em':'0.3em'):'1.2em'}">${w}</tspan>`).join('')}</text>`;}).join('');
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" class="mx-auto">${grids}${axes}<polygon points="${pts}" fill="#0369a1" fill-opacity="0.18" stroke="#0369a1" stroke-width="2"/>${lbls}</svg>`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   LOADER + ERROR UI
+════════════════════════════════════════════════════════════ */
+function showLoader(msg='Loading…'){
+  document.getElementById('app').innerHTML=`<div class="min-h-screen flex items-center justify-center"><div class="text-center"><div class="text-4xl mb-3 animate-pulse">⚡</div><p class="text-slate-400 text-sm">${msg}</p></div></div>`;
+}
+function showError(msg){
+  document.getElementById('app').innerHTML=`<div class="min-h-screen flex items-center justify-center p-5"><div class="bg-white rounded-2xl border border-red-200 p-8 max-w-sm text-center shadow-sm"><div class="text-3xl mb-3">⚠️</div><p class="text-red-600 font-medium mb-2">Something went wrong</p><p class="text-slate-400 text-sm mb-5">${msg}</p><button onclick="boot()" class="px-5 py-2 rounded-xl text-white font-medium" style="background:#0369a1">Try again</button></div></div>`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ROUTER
+════════════════════════════════════════════════════════════ */
+let VIEW='landing', ACTIVE_ENG=null;
+let SV={fi:0,ratings:{},phase:null};
+
+function go(view,eng){VIEW=view;if(eng!==undefined)ACTIVE_ENG=eng;render();window.scrollTo(0,0);}
+
+function render(){
+  const app=document.getElementById('app');
+  app.className='fade'; void app.offsetWidth;
+  switch(VIEW){
+    case 'landing': app.innerHTML=landingHTML(); break;
+    case 'admin':   app.innerHTML=adminHTML(); break;
+    case 'create':  app.innerHTML=createHTML(); break;
+    case 'survey':  renderSurvey(); break;
+    case 'results': app.innerHTML=resultsHTML(false); break;
+    case 'client':  app.innerHTML=resultsHTML(true); break;
+    case 'compare': app.innerHTML=compareHTML(); break;
+  }
+}
+
+async function refreshAndRender(){
+  try{ await loadData(); render(); } catch(e){ showError(e.message); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   SETUP WIZARD
+════════════════════════════════════════════════════════════ */
+function setupHTML(){
+  const SQL=`CREATE TABLE engagements (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  client TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  descs JSONB DEFAULT '{}',
+  ts TIMESTAMPTZ DEFAULT NOW(),
+  parent_id TEXT REFERENCES engagements(id) ON DELETE SET NULL
+);
+
+CREATE TABLE responses (
+  id TEXT PRIMARY KEY,
+  eng_id TEXT NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+  ratings JSONB NOT NULL,
+  ts TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE engagements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "open_eng"  ON engagements FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "open_resp" ON responses   FOR ALL USING (true) WITH CHECK (true);`;
+
+  return `<div class="min-h-screen flex flex-col items-center justify-center p-5" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)">
+    <div class="w-full max-w-xl fade">
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-3">⚡</div>
+        <h1 class="text-2xl font-bold text-white mb-1">HPT Assessment Tool</h1>
+        <p class="text-blue-300 text-sm">One-time setup — takes about 5 minutes</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div class="p-6 border-b border-slate-100">
+          <h2 class="font-bold text-slate-800 text-lg mb-1">Connect to Supabase</h2>
+          <p class="text-slate-500 text-sm">Supabase is a free cloud database — it stores your engagements and responses so any device can access them.</p>
+        </div>
+
+        <div class="p-6 border-b border-slate-100 space-y-5">
+          <div class="flex gap-3">
+            <div class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold shrink-0 mt-0.5">1</div>
+            <div>
+              <p class="font-semibold text-slate-800 mb-1">Create a free Supabase project</p>
+              <p class="text-slate-500 text-sm mb-2">Go to <a href="https://supabase.com" target="_blank" class="text-blue-600 underline">supabase.com</a>, sign up, create a new project. Choose any name and region. Takes ~2 minutes.</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold shrink-0 mt-0.5">2</div>
+            <div class="w-full">
+              <p class="font-semibold text-slate-800 mb-1">Run this SQL in your project</p>
+              <p class="text-slate-500 text-sm mb-2">In Supabase, go to <strong>SQL Editor → New Query</strong>, paste this, and click Run:</p>
+              <div class="relative">
+                <pre class="bg-slate-900 text-green-400 rounded-xl p-4 text-xs overflow-x-auto leading-relaxed">${SQL.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+                <button onclick="navigator.clipboard.writeText(document.getElementById('sql-src').textContent)" class="absolute top-2 right-2 px-2 py-1 rounded-lg bg-slate-700 text-slate-300 text-xs hover:bg-slate-600">Copy</button>
+                <pre id="sql-src" class="hidden">${SQL}</pre>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold shrink-0 mt-0.5">3</div>
+            <div>
+              <p class="font-semibold text-slate-800 mb-1">Copy your Project URL and anon key</p>
+              <p class="text-slate-500 text-sm">In Supabase go to <strong>Project Settings → API</strong>. Copy the <em>Project URL</em> and the <em>anon public</em> key.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Project URL</label>
+            <input id="sb-url" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono" placeholder="https://xxxxxxxxxxxx.supabase.co" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Anon Public Key</label>
+            <input id="sb-key" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono" placeholder="eyJhbGci..." />
+          </div>
+          <p id="sb-err" class="text-red-500 text-sm hidden"></p>
+          <button onclick="testAndSave()" class="w-full py-3 rounded-xl text-white font-semibold hover:opacity-90 mt-2" style="background:#0369a1">Connect & Test →</button>
+          <p class="text-center text-slate-400 text-xs">Your keys are saved only in this browser. They never leave your device.</p>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function testAndSave(){
+  const url=document.getElementById('sb-url').value.trim();
+  const key=document.getElementById('sb-key').value.trim();
+  const errEl=document.getElementById('sb-err');
+  errEl.classList.add('hidden');
+  if(!url||!key){errEl.textContent='Please fill in both fields.';errEl.classList.remove('hidden');return;}
+  try{
+    const testClient=supabase.createClient(url,key);
+    const {error}=await testClient.from('engagements').select('id').limit(1);
+    if(error) throw error;
+    localStorage.setItem('hpt_sb_url',url);
+    localStorage.setItem('hpt_sb_key',key);
+    SUPABASE_URL=url; SUPABASE_KEY=key;
+    SB=testClient;
+    await loadData();
+    render();
+  }catch(e){
+    errEl.textContent='Connection failed: '+e.message+' — check your URL and key, and make sure you ran the SQL migration.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+function resetConfig(){
+  if(!confirm('Clear your Supabase config and restart setup?')) return;
+  localStorage.removeItem('hpt_sb_url');
+  localStorage.removeItem('hpt_sb_key');
+  location.reload();
+}
+
+/* ════════════════════════════════════════════════════════════
+   LANDING
+════════════════════════════════════════════════════════════ */
+function landingHTML(){
+  return `<div class="min-h-screen flex flex-col items-center justify-center p-5" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 55%,#0369a1 100%)">
+    <div class="w-full max-w-md fade">
+      <div class="text-center mb-9"><div class="text-5xl mb-3">⚡</div>
+        <h1 class="text-3xl font-bold text-white mb-1">High Performance Team</h1>
+        <p class="text-blue-200">Assessment Tool</p></div>
+      <div class="space-y-4">
+        <div class="bg-white rounded-2xl p-6 shadow-xl">
+          <h2 class="font-semibold text-slate-800 text-lg mb-1">📋 Take the Assessment</h2>
+          <p class="text-slate-400 text-sm mb-4">Enter the code provided by your facilitator</p>
+          <div class="flex gap-2">
+            <input id="scode" class="flex-1 border border-slate-200 rounded-xl px-4 py-3 font-mono uppercase tracking-widest text-lg text-center" placeholder="e.g. ACME2024" maxlength="12"/>
+            <button onclick="startSurvey()" class="px-5 py-3 rounded-xl text-white font-semibold hover:opacity-90" style="background:#0369a1">Go →</button>
+          </div>
+          <p id="serr" class="text-red-500 text-sm mt-2 hidden"></p>
+        </div>
+        <button onclick="go('admin')" class="w-full rounded-2xl p-5 text-left hover:opacity-90 border border-white/20" style="background:rgba(255,255,255,.1)">
+          <div class="flex items-center justify-between">
+            <div><h2 class="font-semibold text-white text-lg mb-0.5">🔐 Admin Panel</h2>
+            <p class="text-blue-200 text-sm">Create engagements &amp; view results</p></div>
+            <span class="text-white text-xl">→</span>
+          </div>
+        </button>
+      </div>
+      <div class="text-center mt-8">
+        <p class="text-xs font-semibold tracking-widest uppercase text-blue-200">Andrew Hall Coaching</p>
+        <p class="text-xs tracking-widest uppercase text-blue-300/50" style="font-size:9px">© ${new Date().getFullYear()} The Coaching Doc Ltd.</p>
+      </div>
+
+      <!-- Privacy notice -->
+      <div class="mt-5 rounded-xl p-4 text-left" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12)">
+        <p class="text-xs font-semibold mb-2 text-blue-200">Privacy — what happens to your data</p>
+        <ul class="space-y-1.5" style="color:rgba(147,197,253,0.6);font-size:10px;line-height:1.5">
+          <li>· Responses are fully anonymous — no name or personal information is collected.</li>
+          <li>· Your ratings are stored in a cloud database (Supabase, hosted on AWS).</li>
+          <li>· Only aggregated team results are visible to your facilitator. Individual responses are not attributed to you.</li>
+          <li>· Your data is not shared with or sold to any third party.</li>
+          <li>· This tool does not currently hold a formal Data Processing Agreement and is not independently GDPR certified. If you have concerns, speak to your facilitator before proceeding.</li>
+          <li>· To request deletion of your data, contact your facilitator.</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+function startSurvey(){
+  const code=document.getElementById('scode').value.toUpperCase().trim();
+  const eng=ENGAGEMENTS.find(e=>e.code===code);
+  if(!eng){const el=document.getElementById('serr');el.textContent='Code not found. Please check with your facilitator.';el.classList.remove('hidden');return;}
+  SV={fi:0,ratings:{},phase:null};
+  go('survey',eng);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ADMIN
+════════════════════════════════════════════════════════════ */
+function adminHTML(){
+  const cards=ENGAGEMENTS.length===0
+    ?`<div class="text-center py-24"><div class="text-5xl mb-4">📋</div><h2 class="text-slate-500 text-xl font-medium mb-2">No engagements yet</h2><p class="text-slate-400 mb-6">Create your first engagement to get started</p><button onclick="go('create')" class="px-6 py-3 rounded-xl text-white font-medium" style="background:#0369a1">+ New Engagement</button></div>`
+    :ENGAGEMENTS.map(e=>{
+      const n=RESPONSES.filter(r=>r.engId===e.id).length;
+      const isRescan=!!e.parentId;
+      const hasRescan=ENGAGEMENTS.some(x=>x.parentId===e.id);
+      const inChain=isRescan||hasRescan;
+      const chainLen=inChain?buildChain(chainRootId(e.id)).length:1;
+      return `<div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm card">
+        <div class="flex items-start justify-between mb-1">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="font-bold text-slate-800 text-lg">${e.name}</h2>
+              <span class="font-mono text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg">${e.code}</span>
+              ${isRescan?'<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">Re-scan</span>':''}
+              ${inChain&&chainLen>1?`<span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium">${chainLen}-scan series</span>`:''}
+            </div>
+            <p class="text-slate-400 text-sm mt-0.5">${e.client} · ${new Date(e.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p>
+          </div>
+          <div class="text-right shrink-0"><span class="text-2xl font-bold text-slate-800">${n}</span><p class="text-slate-400 text-xs">response${n!==1?'s':''}</p></div>
+        </div>
+        <div class="flex gap-2 mt-4 pt-4 border-t border-slate-100 flex-wrap">
+          <button onclick='viewResults("${e.id}")' class="flex-1 py-2 rounded-xl text-sm font-medium text-white hover:opacity-90" style="background:#0369a1;min-width:100px">View Results</button>
+          ${inChain?`<button onclick='viewCompare("${e.id}")' class="px-3 py-2 rounded-xl text-sm font-medium bg-purple-50 text-purple-700 hover:bg-purple-100">📊 Progression</button>`:''}
+          ${!hasRescan?`<button onclick='createRescan("${e.id}")' class="px-3 py-2 rounded-xl text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100">+ Re-scan</button>`:''}
+          <button onclick='exportCSV(ENGAGEMENTS.find(x=>x.id==="${e.id}"))' class="px-3 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">CSV</button>
+          <button onclick='delEng("${e.id}")' class="px-3 py-2 rounded-xl text-sm font-medium bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  return `<div class="min-h-screen bg-slate-50">
+    <div class="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between sticky top-0 z-10">
+      <div class="flex items-center gap-3">
+        <button onclick="go('landing')" class="text-slate-400 hover:text-slate-600 text-sm">← Back</button>
+        <h1 class="font-bold text-slate-800 text-xl">Admin Panel</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="refreshAndRender()" class="px-3 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">↻ Refresh</button>
+        <button onclick="go('create')" class="px-4 py-2 rounded-xl text-white font-medium text-sm hover:opacity-90" style="background:#0369a1">+ New Engagement</button>
+      </div>
+    </div>
+    <div class="max-w-3xl mx-auto p-5 space-y-4">${cards}</div>
+    <div class="max-w-3xl mx-auto px-5 pb-8 text-center">
+      <button onclick="resetConfig()" class="text-slate-300 text-xs hover:text-slate-400">Reset Supabase connection</button>
+    </div>
+  </div>`;
+}
+
+function viewResults(id){ go('results',ENGAGEMENTS.find(e=>e.id===id)); }
+
+function viewCompare(engId){
+  const rootId=chainRootId(engId);
+  ACTIVE_ENG=ENGAGEMENTS.find(e=>e.id===rootId);
+  go('compare');
+}
+
+async function delEng(id){
+  if(!confirm('Delete this engagement and all its responses?')) return;
+  showLoader('Deleting…');
+  try{
+    await SB.from('responses').delete().eq('eng_id',id);
+    await SB.from('engagements').delete().eq('id',id);
+    await loadData(); go('admin');
+  }catch(e){ showError(e.message); }
+}
+
+async function createRescan(parentId){
+  const parent=ENGAGEMENTS.find(e=>e.id===parentId);
+  if(!parent) return;
+  const prefix=parent.client.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||'HPT';
+  const code=prefix+Math.floor(1000+Math.random()*9000);
+  const chain=buildChain(chainRootId(parentId));
+  const baseName=parent.name.replace(/ \(Re-scan \d+\)$/,'');
+  const scanNum=chain.length;
+  const eng={id:Date.now().toString(),name:`${baseName} (Re-scan ${scanNum})`,client:parent.client,code,descs:parent.descs||{},ts:new Date().toISOString(),parent_id:parentId};
+  showLoader('Creating re-scan…');
+  try{
+    await SB.from('engagements').insert([eng]);
+    await loadData();
+    alert(`Re-scan ${scanNum} created!\n\nSurvey code: ${code}\n\nShare this with your team to begin the follow-up assessment.`);
+    go('admin');
+  }catch(e){ showError(e.message); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   CREATE ENGAGEMENT
+════════════════════════════════════════════════════════════ */
+let CE={step:1,name:'',client:'',descs:{}};
+function initCE(){CE={step:1,name:'',client:'',descs:{}};ALL_FACTORS.forEach(f=>{CE.descs[f.id]=f.def;});}
+
+function createHTML(){
+  if(!CE.descs||Object.keys(CE.descs).length===0) initCE();
+  const stepBar=[1,2,3].map(s=>`<div class="flex items-center gap-1"><div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${CE.step>=s?'text-white':'bg-slate-100 text-slate-400'}" style="${CE.step>=s?'background:#0369a1':''}">${CE.step>s?'✓':s}</div>${s<3?`<div class="w-5 h-0.5 ${CE.step>s?'bg-blue-600':'bg-slate-200'}"></div>`:''}</div>`).join('');
+  let body='';
+  if(CE.step===1){
+    body=`<div>
+      <h2 class="text-xl font-bold text-slate-800 mb-1">Engagement Details</h2>
+      <p class="text-slate-400 mb-6 text-sm">Basic information about this engagement</p>
+      <div class="space-y-4">
+        <div><label class="block text-sm font-medium text-slate-700 mb-1">Engagement Name *</label>
+          <input id="ce-name" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800" placeholder="e.g. Water Division HPT Assessment Q1 2025" value="${CE.name}"/></div>
+        <div><label class="block text-sm font-medium text-slate-700 mb-1">Client / Organisation *</label>
+          <input id="ce-client" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800" placeholder="e.g. Acme Water Services" value="${CE.client}"/></div>
+      </div>
+      <div class="flex justify-end mt-6"><button onclick="ce1next()" class="px-6 py-3 rounded-xl text-white font-medium hover:opacity-90" style="background:#0369a1">Next: Set Descriptors →</button></div>
+    </div>`;
+  } else if(CE.step===2){
+    const blocks=PILLARS.map(p=>`<div class="mb-5">
+      <div class="flex items-center gap-2 mb-2"><span>${p.em}</span><span class="font-semibold text-sm uppercase tracking-wider" style="color:${p.col}">${p.name}</span></div>
+      ${p.factors.map(f=>`<div class="bg-white rounded-xl border border-slate-200 p-4 mb-2">
+        <label class="block text-sm font-semibold text-slate-700 mb-1.5">${f.name}</label>
+        <textarea id="desc-${f.id}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 resize-none" rows="2">${CE.descs[f.id]||f.def}</textarea>
+      </div>`).join('')}
+    </div>`).join('');
+    body=`<div>
+      <h2 class="text-xl font-bold text-slate-800 mb-1">Factor Descriptors</h2>
+      <p class="text-slate-400 mb-5 text-sm">Enter the team's co-created language for each factor.</p>
+      ${blocks}
+      <div class="flex justify-between mt-6">
+        <button onclick="CE.step=1;render()" class="px-6 py-3 rounded-xl font-medium bg-slate-100 text-slate-600">← Back</button>
+        <button onclick="ce2create()" class="px-6 py-3 rounded-xl text-white font-medium hover:opacity-90" style="background:#0369a1">Create Engagement →</button>
+      </div>
+    </div>`;
+  } else {
+    const eng=ENGAGEMENTS[0];
+    body=`<div class="text-center py-10">
+      <div class="text-5xl mb-4">🎉</div>
+      <h2 class="text-2xl font-bold text-slate-800 mb-2">Engagement Created!</h2>
+      <p class="text-slate-500 mb-7">Share this code with your team</p>
+      <div class="inline-block bg-white rounded-2xl border-2 border-blue-200 px-12 py-8 shadow-lg mb-7">
+        <p class="text-slate-400 text-sm mb-1">Survey Code</p>
+        <p class="font-mono text-5xl font-bold tracking-widest text-blue-700">${eng?.code||''}</p>
+        <p class="text-slate-400 text-xs mt-2">Team members enter this on the home screen</p>
+      </div>
+      <div><button onclick="go('admin')" class="px-8 py-3 rounded-xl font-medium bg-slate-100 text-slate-700 hover:bg-slate-200">Back to Admin →</button></div>
+    </div>`;
+  }
+  return `<div class="min-h-screen bg-slate-50">
+    <div class="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between sticky top-0 z-10">
+      <div class="flex items-center gap-3"><button onclick="go('admin')" class="text-slate-400 hover:text-slate-600 text-sm">← Back</button><h1 class="font-bold text-slate-800 text-xl">New Engagement</h1></div>
+      <div class="flex items-center gap-1">${stepBar}</div>
+    </div>
+    <div class="max-w-2xl mx-auto p-5 fade">${body}</div>
+  </div>`;
+}
+
+function ce1next(){
+  const name=document.getElementById('ce-name').value.trim(),client=document.getElementById('ce-client').value.trim();
+  if(!name||!client){alert('Please fill in both fields.');return;}
+  CE.name=name;CE.client=client;CE.step=2;render();
+}
+async function ce2create(){
+  ALL_FACTORS.forEach(f=>{const el=document.getElementById('desc-'+f.id);if(el)CE.descs[f.id]=el.value.trim()||f.def;});
+  const prefix=CE.client.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||'HPT';
+  const code=prefix+Math.floor(1000+Math.random()*9000);
+  const eng={id:Date.now().toString(),name:CE.name,client:CE.client,code,descs:{...CE.descs},ts:new Date().toISOString()};
+  showLoader('Creating engagement…');
+  try{
+    await SB.from('engagements').insert([eng]);
+    await loadData();
+    CE.step=3; render();
+  }catch(e){ showError(e.message); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   SURVEY — fully anonymous
+════════════════════════════════════════════════════════════ */
+function renderSurvey(){
+  const app=document.getElementById('app');
+  if(!ACTIVE_ENG){go('landing');return;}
+
+  if(SV.phase==='done'){
+    app.innerHTML=`<div class="min-h-screen flex flex-col items-center justify-center p-6 text-center" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)">
+      <div class="text-6xl mb-5">🙌</div>
+      <h1 class="text-3xl font-bold text-white mb-3">All done — thank you!</h1>
+      <p class="text-blue-200 mb-8 max-w-sm">Your responses have been recorded anonymously. Your facilitator will be in touch with insights and next steps.</p>
+      <div class="bg-white/10 rounded-2xl p-5 mb-8 text-left max-w-sm">
+        <p class="text-blue-200 text-sm font-medium mb-2">What happens next</p>
+        <p class="text-white text-sm">Andrew will analyse the team's aggregated results, identify strengths and work-ons, and come back to you with recommendations and suggested focus areas.</p>
+      </div>
+      <button onclick="go('landing')" class="px-8 py-3 rounded-xl bg-white text-slate-800 font-semibold hover:bg-slate-100">← Return Home</button>
+      <p class="mt-8" style="font-size:9px;letter-spacing:.08em;color:rgba(147,197,253,.4)">ANDREW HALL COACHING · © ${new Date().getFullYear()} THE COACHING DOC LTD.</p>
+    </div>`;
+    return;
+  }
+
+  if(!SV.phase){
+    app.innerHTML=`<div class="min-h-screen flex flex-col items-center justify-center p-5" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)">
+      <div class="w-full max-w-lg fade">
+        <div class="text-center mb-7"><div class="text-4xl mb-3">⚡</div>
+          <h1 class="text-2xl font-bold text-white mb-1">${ACTIVE_ENG.name}</h1>
+          <p class="text-blue-300">${ACTIVE_ENG.client}</p></div>
+        <div class="bg-white rounded-2xl p-6 shadow-xl mb-4">
+          <h2 class="font-semibold text-slate-800 mb-4">Before you begin</h2>
+          <div class="space-y-1.5 text-sm text-slate-600 mb-5">
+            <p>✅ <strong>${ALL_STMTS.length} statements</strong> across 4 pillars and 13 factors</p>
+            <p>✅ Rate each on a <strong>1–6 scale</strong> — 1 = Strongly Disagree, 6 = Strongly Agree</p>
+            <p>✅ <strong>Fully anonymous</strong> — no personal information is collected</p>
+            <p>✅ Takes approximately <strong>15–20 minutes</strong></p>
+          </div>
+          <button onclick="svStart()" class="w-full py-3 rounded-xl text-white font-semibold hover:opacity-90" style="background:#0369a1">Begin Assessment →</button>
+        </div>
+        <button onclick="go('landing')" class="w-full text-blue-300 text-sm hover:text-white">← Back to home</button>
+        <p class="text-center mt-4" style="font-size:9px;letter-spacing:.08em;color:rgba(147,197,253,.4)">ANDREW HALL COACHING · © ${new Date().getFullYear()} THE COACHING DOC LTD.</p>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const factor=ALL_FACTORS[SV.fi];
+  const totalF=ALL_FACTORS.length, totalS=ALL_STMTS.length;
+  const answered=Object.keys(SV.ratings).length;
+  const progPct=Math.round((answered/totalS)*100);
+  const allRated=factor.stmts.every(s=>SV.ratings[s.id]!=null);
+  const desc=(ACTIVE_ENG.descs&&ACTIVE_ENG.descs[factor.id])||factor.def;
+  const RLBL=['','Strongly\nDisagree','Disagree','Slightly\nDisagree','Slightly\nAgree','Agree','Strongly\nAgree'];
+  const RCOL=['','#dc2626','#f97316','#eab308','#84cc16','#22c55e','#16a34a'];
+  const stmtHTML=factor.stmts.map(s=>{
+    const sel=SV.ratings[s.id];
+    const btns=[1,2,3,4,5,6].map(v=>`<button class="rb rounded-xl py-3 flex flex-col items-center justify-center flex-1 ${sel===v?'on':''}"
+      style="background:${sel===v?RCOL[v]:'#f1f5f9'};color:${sel===v?'white':RCOL[v]}"
+      onclick="svRate('${s.id}',${v})">
+      <span class="text-lg font-bold leading-none">${v}</span>
+      <span class="text-[9px] font-medium leading-tight text-center whitespace-pre-line mt-0.5 opacity-80">${RLBL[v]}</span>
+    </button>`).join('');
+    return `<div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <p class="text-slate-700 font-medium mb-4 leading-relaxed">${s.t}</p>
+      <div class="flex gap-1.5">${btns}</div>
+    </div>`;
+  }).join('');
+
+  app.innerHTML=`<div class="min-h-screen bg-slate-50 pb-24">
+    <div class="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-10">
+      <div class="max-w-3xl mx-auto">
+        <div class="flex justify-between text-xs text-slate-400 mb-1.5">
+          <span>Factor ${SV.fi+1} of ${totalF}</span><span>${answered} / ${totalS} rated</span>
+        </div>
+        <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full pbar" style="width:${progPct}%;background:#0369a1"></div></div>
+      </div>
+    </div>
+    <div class="max-w-3xl mx-auto px-4 pt-4 space-y-4 fade">
+      <div class="rounded-2xl p-5" style="background:${factor.pcol}18;border-left:4px solid ${factor.pcol}">
+        <div class="flex items-center gap-2 mb-1"><span>${factor.pem}</span><span class="text-sm font-medium" style="color:${factor.pcol}">${factor.pname}</span></div>
+        <h2 class="text-xl font-bold text-slate-800 mb-1">${factor.name}</h2>
+        <p class="text-slate-500 text-sm italic">"${desc}"</p>
+      </div>
+      ${stmtHTML}
+    </div>
+  </div>
+  <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 z-10">
+    <div class="max-w-3xl mx-auto flex items-center gap-3">
+      <button onclick="svPrev()" ${SV.fi===0?'disabled':''} class="px-5 py-3 rounded-xl font-medium bg-slate-100 text-slate-600 disabled:opacity-30">← Prev</button>
+      <div class="flex-1 text-center text-xs text-slate-400">${!allRated?`${factor.stmts.filter(s=>SV.ratings[s.id]==null).length} remaining`:''}</div>
+      <button onclick="svNext()" ${!allRated?'disabled':''} class="px-5 py-3 rounded-xl font-medium text-white hover:opacity-90 disabled:opacity-40" style="background:#0369a1">${SV.fi===totalF-1?'Submit ✓':'Next →'}</button>
+    </div>
+  </div>`;
+}
+
+function svStart(){SV.phase='taking';SV.fi=0;renderSurvey();}
+function svRate(id,val){SV.ratings[id]=val;renderSurvey();}
+function svPrev(){if(SV.fi>0){SV.fi--;renderSurvey();window.scrollTo(0,0);}}
+async function svNext(){
+  if(SV.fi<ALL_FACTORS.length-1){SV.fi++;renderSurvey();window.scrollTo(0,0);}
+  else{
+    showLoader('Saving your responses…');
+    try{
+      const resp={id:Date.now().toString(),eng_id:ACTIVE_ENG.id,ratings:{...SV.ratings},ts:new Date().toISOString()};
+      await SB.from('responses').insert([resp]);
+      await loadData();
+      SV.phase='done'; renderSurvey();
+    }catch(e){ showError('Could not save your response: '+e.message+'. Please try again.'); }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESULTS
+════════════════════════════════════════════════════════════ */
+function resultsHTML(clientMode=false){
+  const eng=ACTIVE_ENG;
+  const resps=RESPONSES.filter(r=>r.engId===eng.id);
+  if(!resps.length) return `<div class="min-h-screen bg-slate-50">
+    <div class="bg-white border-b border-slate-200 px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+      <button onclick="go('admin')" class="text-slate-400 hover:text-slate-600 text-sm">← Back</button>
+      <h1 class="font-bold text-slate-800 text-xl">${eng.name}</h1>
+      <button onclick="refreshAndRender()" class="ml-auto px-3 py-2 rounded-xl text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">↻ Refresh</button>
+    </div>
+    <div class="flex flex-col items-center justify-center py-32 text-center px-5">
+      <div class="text-5xl mb-4">📭</div>
+      <h2 class="text-xl font-semibold text-slate-700 mb-2">No responses yet</h2>
+      <p class="text-slate-400">Share code <span class="font-mono font-bold text-blue-600">${eng.code}</span> with your team to begin.</p>
+      <p class="text-slate-400 text-sm mt-2">Use ↻ Refresh to check for new submissions.</p>
+    </div>
+  </div>`;
+
+  const scores=computeScores(resps);
+  const ranked=rankedFactors(scores);
+  const total=ranked.length;
+  const avgMap=stmtAvgs(resps);
+  const inChain=!!eng.parentId||ENGAGEMENTS.some(x=>x.parentId===eng.id);
+  const narrativeHTML = clientMode ? '' : generateNarrative(eng,resps,scores,ranked,total);
+
+  const pillarCards=PILLARS.map(p=>{
+    const avg=scores[p.id].avg,pct=(avg/6)*100;
+    const mat=maturity(avg);
+    return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm card">
+      <div class="flex items-center gap-2 mb-2"><span class="text-xl">${p.em}</span><span class="font-semibold text-sm text-slate-700">${p.name}</span></div>
+      <div class="flex items-end gap-1 mb-2"><span class="text-3xl font-bold" style="color:${p.col}">${avg.toFixed(1)}</span><span class="text-slate-400 text-sm pb-1"> / 6.0</span></div>
+      <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full rounded-full pbar" style="width:${pct.toFixed(1)}%;background:${p.col}"></div></div>
+      <div class="mt-2 text-xs font-semibold" style="color:${mat.col}">${mat.lbl}</div>
+    </div>`;
+  }).join('');
+
+  const barChart=PILLARS.map(p=>{
+    const avg=scores[p.id].avg,pct=(avg/6)*100;
+    return `<div class="flex items-center gap-2 mb-2">
+      <span class="w-28 text-xs font-medium text-slate-600 shrink-0">${p.name}</span>
+      <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
+        <div class="h-full rounded-full pbar flex items-center pl-2" style="width:${pct.toFixed(1)}%;background:${p.col};min-width:36px">
+          <span class="text-white text-xs font-bold">${avg.toFixed(1)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const factorRows=ranked.map((f,rank)=>{
+    const col=relCol(rank,total);
+    const pct=(f.score/6)*100;
+    const mat=maturity(f.score);
+    const intv=INTV[f.fid];
+    const align=factorAlignment(f.fid,resps);
+    const spotlight=lowestStmt(f.fid,avgMap);
+    const isStrength=col.tier==='strength';
+    const isWorkOn=col.tier==='workon';
+    const canExpand=isStrength||isWorkOn;
+    const spotlightHTML=spotlight?`<div class="mt-3 pt-3 border-t border-slate-100">
+      <p class="text-xs font-semibold text-slate-500 mb-1.5">📌 Most provocative statement (${spotlight.score.toFixed(1)}/6)</p>
+      <p class="text-sm text-slate-600 italic">"${spotlight.text}"</p>
+    </div>`:'';
+    let expContent='';
+    if(isStrength&&intv){
+      expContent=`<div class="px-5 pb-5 pt-2" style="background:${col.bg}80">
+        <div class="grid md:grid-cols-2 gap-3">
+          <div class="bg-white rounded-xl p-4 border" style="border-color:${col.bd}">
+            <h4 class="font-bold text-sm mb-3" style="color:${col.tx}">⭐ Super Strength It!</h4>
+            <ul class="space-y-2">${intv.ss.map(s=>`<li class="text-sm text-slate-700 flex gap-2"><span class="text-slate-300 shrink-0 mt-0.5">→</span><span>${s}</span></li>`).join('')}</ul>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-200">
+            <h4 class="font-semibold text-sm text-slate-600 mb-3">🪞 Reflection Prompts</h4>
+            <ul class="space-y-2">${intv.r.map(s=>`<li class="text-sm text-slate-700 flex gap-2"><span class="text-slate-300 shrink-0 mt-0.5">?</span><span>${s}</span></li>`).join('')}</ul>
+          </div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-slate-200 space-y-3">
+          ${spotlightHTML}
+          <a href="mailto:ah@andrewhallcoaching.com?subject=HPT — Super Strength Session: ${encodeURIComponent(f.fname)}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white hover:opacity-90" style="background:#059669">📅 Book a Super Strength session</a>
+        </div>
+      </div>`;
+    } else if(isWorkOn&&intv){
+      const themes=themeBreakdown(f.fid,avgMap);
+      const themeHTML=themes.map((th,ti)=>{
+        const thPct=(th.avg/6)*100, isWeakest=ti===0;
+        return `<div class="rounded-lg p-3 border ${isWeakest?'border-red-200 bg-red-50':'border-slate-100 bg-white'} mb-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-semibold ${isWeakest?'text-red-700':'text-slate-600'}">${th.name}${isWeakest?' — Focus here':''}</span>
+            <span class="text-xs font-bold ${isWeakest?'text-red-700':'text-slate-500'}">${th.avg.toFixed(1)}</span>
+          </div>
+          <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width:${thPct.toFixed(1)}%;background:${isWeakest?'#ef4444':'#94a3b8'}"></div>
+          </div>
+        </div>`;
+      }).join('');
+      expContent=`<div class="px-5 pb-5 pt-2" style="background:${col.bg}80">
+        <div class="grid md:grid-cols-2 gap-3 mb-3">
+          <div class="bg-white rounded-xl p-4 border" style="border-color:${col.bd}">
+            <h4 class="font-bold text-sm mb-3" style="color:${col.tx}">💡 Suggested Interventions</h4>
+            <ul class="space-y-2">${intv.s.map(s=>`<li class="text-sm text-slate-700 flex gap-2"><span class="text-slate-300 shrink-0 mt-0.5">→</span><span>${s}</span></li>`).join('')}</ul>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-200">
+            <h4 class="font-semibold text-sm text-slate-600 mb-3">🪞 Reflection Prompts</h4>
+            <ul class="space-y-2">${intv.r.map(s=>`<li class="text-sm text-slate-700 flex gap-2"><span class="text-slate-300 shrink-0 mt-0.5">?</span><span>${s}</span></li>`).join('')}</ul>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4 mb-3">
+          <h4 class="font-semibold text-sm text-slate-700 mb-3">📊 What the data is saying — themes within ${f.fname}</h4>
+          ${themeHTML}
+        </div>
+        <div class="pt-2 border-t border-slate-200 space-y-3">
+          ${spotlightHTML}
+          <a href="mailto:ah@andrewhallcoaching.com?subject=HPT — Work-On Session: ${encodeURIComponent(f.fname)}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white hover:opacity-90" style="background:#0369a1">📅 Book a focused session on ${f.fname}</a>
+        </div>
+      </div>`;
+    }
+    return `<div class="border-b border-slate-100 last:border-0">
+      <div class="${canExpand?'cursor-pointer hover:bg-slate-50':'cursor-default'} transition-colors" onclick="${canExpand?`toggleExp('exp-${f.fid}',this)`:''}">
+        <div class="flex items-center gap-3 px-5 py-4">
+          <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">${rank+1}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="font-semibold text-slate-800">${f.fname}</span>
+              <span class="text-xs font-medium" style="color:${f.pcol}">· ${f.pname}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full rounded-full pbar" style="width:${pct.toFixed(1)}%;background:${col.tx}"></div>
+              </div>
+              <span class="text-sm font-bold w-8 text-right" style="color:${col.tx}">${f.score.toFixed(1)}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="text-right">
+              <div><span class="text-xs px-2 py-0.5 rounded-full font-semibold border" style="background:${col.bg};color:${col.tx};border-color:${col.bd}">${col.lbl}</span></div>
+              <div class="text-[10px] mt-0.5 font-semibold" style="color:${mat.col}">${mat.lbl}</div>
+              ${align?`<div class="text-[10px] mt-0.5 font-semibold cursor-help" style="color:${align.col}" title="Team alignment on this factor (based on response spread)">${align.icon} ${align.lbl}</div>`:''}
+            </div>
+            ${canExpand?'<span class="exp-arrow text-slate-300 text-sm">▼</span>':'<span class="text-slate-200 text-sm">—</span>'}
+          </div>
+        </div>
+      </div>
+      <div id="exp-${f.fid}" class="exp-body">${expContent}</div>
+    </div>`;
+  }).join('');
+
+  const header = clientMode ? `
+    <div class="bg-white border-b border-slate-200 px-5 py-4 sticky top-0 z-10 no-print">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">⚡</span>
+          <div><h1 class="font-bold text-slate-800 text-lg leading-tight">${eng.name}</h1>
+          <p class="text-slate-400 text-xs">${eng.client} · Team Assessment Results · andrewhallcoaching.com</p></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openExecSummary()" class="px-4 py-2 rounded-xl text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100">📄 Export PDF</button>
+        </div>
+      </div>
+    </div>` : `
+    <div class="bg-white border-b border-slate-200 px-5 py-4 sticky top-0 z-10 no-print">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button onclick="go('admin')" class="text-slate-400 hover:text-slate-600 text-sm">← Back</button>
+          <div><h1 class="font-bold text-slate-800 text-lg leading-tight">${eng.name}</h1>
+          <p class="text-slate-400 text-xs">${eng.client} · ${resps.length} anonymous response${resps.length!==1?'s':''}</p></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="refreshAndRender()" class="px-3 py-2 rounded-xl text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">↻</button>
+          ${inChain?`<button onclick='viewCompare("${eng.id}")' class="px-3 py-2 rounded-xl text-sm font-medium bg-purple-50 text-purple-700 hover:bg-purple-100">📊 Progression</button>`:''}
+          <button onclick='exportCSV(ACTIVE_ENG)' class="px-4 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">⬇ CSV</button>
+          <button id="share-btn" onclick='shareClientLink("${eng.code}")' class="px-4 py-2 rounded-xl text-sm font-medium bg-green-50 text-green-700 hover:bg-green-100">🔗 Share with Client</button>
+          <button onclick="openExecSummary()" class="px-4 py-2 rounded-xl text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100">📄 Export PDF</button>
+        </div>
+      </div>
+    </div>`;
+
+  return `<div class="min-h-screen bg-slate-50">
+    ${header}
+    <div class="max-w-5xl mx-auto p-5 space-y-5 fade">
+      ${narrativeHTML}
+      <div><h2 class="text-base font-bold text-slate-800 mb-3">Pillar Overview</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${pillarCards}</div></div>
+      <div class="grid lg:grid-cols-2 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"><h3 class="font-semibold text-slate-700 mb-3 text-sm">Team Radar Profile</h3>${radarSVG(PILLARS,scores)}</div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 class="font-semibold text-slate-700 mb-4 text-sm">Pillar Scores (out of 6)</h3>
+          <div class="mt-2">${barChart}</div>
+          <div class="mt-4 pt-4 border-t border-slate-100">
+            <p class="text-xs font-semibold text-slate-500 mb-2">Maturity Scale</p>
+            <div class="flex flex-wrap gap-1">${['Underpower','Developing','Defined','Advanced','Exemplary'].map((lbl,i)=>{const m=maturity([1.5,2.5,3.5,4.5,5.5][i]);return `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold" style="background:${m.bg};color:${m.col}">${m.lbl} ${[1,2,3,4,5][i]}–${[2,3,4,5,6][i]}</span>`;}).join('')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100">
+          <h2 class="font-bold text-slate-800">All Factors — Ranked</h2>
+          <p class="text-slate-400 text-xs mt-0.5">Strengths and Work-Ons are expandable. Each factor shows Team Tier (relative) and Maturity level (absolute benchmark).</p>
+        </div>
+        <div>${factorRows}</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm text-center">
+        <p class="text-slate-400 text-sm">🔒 ${resps.length} anonymous response${resps.length!==1?'s':''} · No personal data stored</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   PROGRESSION — multi-scan with significance
+════════════════════════════════════════════════════════════ */
+function compareHTML(){
+  const root=ACTIVE_ENG;
+  if(!root) return `<div class="p-10 text-center text-slate-400">No data.</div>`;
+  const chain=buildChain(root.id);
+  if(chain.length<2) return `<div class="min-h-screen bg-slate-50">
+    <div class="bg-white border-b border-slate-200 px-5 py-4 flex items-center gap-3">
+      <button onclick="go('admin')" class="text-slate-400 text-sm">← Back</button><h1 class="font-bold text-slate-800 text-xl">Progression</h1>
+    </div><div class="flex flex-col items-center justify-center py-32 text-center px-5">
+      <div class="text-4xl mb-4">📭</div>
+      <p class="text-slate-500">At least two scans are needed. Use "+ Re-scan" in Admin.</p>
+    </div></div>`;
+
+  const chainResps=chain.map(eng=>RESPONSES.filter(r=>r.engId===eng.id));
+  const emptyIdx=chainResps.findIndex(r=>r.length===0);
+  if(emptyIdx>=0) return `<div class="min-h-screen bg-slate-50">
+    <div class="bg-white border-b border-slate-200 px-5 py-4 flex items-center gap-3">
+      <button onclick="go('admin')" class="text-slate-400 text-sm">← Back</button><h1 class="font-bold text-slate-800 text-xl">Progression</h1>
+    </div><div class="flex flex-col items-center justify-center py-32 text-center px-5">
+      <div class="text-4xl mb-4">📭</div>
+      <p class="text-slate-500 font-medium">${chain[emptyIdx].name}</p>
+      <p class="text-slate-400 text-sm mt-1">This scan has no responses yet.</p>
+    </div></div>`;
+
+  const chainScores=chain.map((eng,i)=>computeScores(chainResps[i]));
+  const scanLabel=(i)=>i===0?'Original':'Re-scan '+i;
+  const scanDate=(eng)=>new Date(eng.ts).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+
+  const pillarSection=PILLARS.map(p=>{
+    const pScores=chainScores.map(s=>s[p.id].avg);
+    const overall=pScores[pScores.length-1]-pScores[0];
+    const oArrow=overall>0.1?'↑':overall<-0.1?'↓':'→';
+    const oCol=overall>0.1?'#059669':overall<-0.1?'#dc2626':'#94a3b8';
+    const dots=pScores.map((score,i)=>{
+      const diff=i>0?score-pScores[i-1]:null;
+      const dArrow=diff!=null?(diff>0.1?'↑':diff<-0.1?'↓':'→'):null;
+      const dCol=diff!=null?(diff>0.1?'#059669':diff<-0.1?'#dc2626':'#94a3b8'):null;
+      return `<div class="flex flex-col items-center min-w-0">
+        <div class="text-[10px] text-slate-400 mb-0.5">${scanLabel(i)}</div>
+        <div class="text-lg font-bold" style="color:${p.col}">${score.toFixed(1)}</div>
+        <div class="text-[10px] text-slate-400">${scanDate(chain[i])}</div>
+        ${diff!=null?`<div class="text-xs font-bold mt-0.5" style="color:${dCol}">${dArrow}${Math.abs(diff).toFixed(2)}</div>`:'<div class="invisible text-xs mt-0.5">—</div>'}
+      </div>`;
+    });
+    const dotsHtml=dots.reduce((acc,d,i)=>i===0?[d]:[...acc,`<div class="flex items-center pt-4 text-slate-200 px-1">›</div>`,d],[]).join('');
+    return `<div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-lg">${p.em}</span><span class="font-semibold text-slate-700 text-sm flex-1">${p.name}</span>
+        <span class="text-base font-bold" style="color:${oCol}">${oArrow}</span>
+        <span class="text-sm font-bold" style="color:${oCol}">${overall>=0?'+':''}${overall.toFixed(2)}</span>
+      </div>
+      <div class="flex items-start gap-1 flex-wrap">${dotsHtml}</div>
+    </div>`;
+  }).join('');
+
+  // ── Momentum callout (last two scans) ────────────────────
+  const lastI=chain.length-1;
+  const factorDeltas=PILLARS.flatMap(p=>p.factors.map(f=>{
+    const prev=chainScores[lastI-1][p.id]?.factors[f.id]?.score??0;
+    const curr=chainScores[lastI][p.id]?.factors[f.id]?.score??0;
+    return {fname:f.name,pname:p.name,pcol:p.col,delta:curr-prev,curr};
+  })).sort((a,b)=>b.delta-a.delta);
+  const gainers=factorDeltas.filter(f=>f.delta>0.1);
+  const decliners=factorDeltas.filter(f=>f.delta<-0.1).reverse();
+  const stable=factorDeltas.filter(f=>Math.abs(f.delta)<=0.1);
+  const momentumHTML=`<div class="bg-white rounded-2xl border border-slate-200 p-5">
+    <h2 class="font-bold text-slate-800 mb-1">⚡ Key Movers — Scan ${lastI} → ${lastI+1}</h2>
+    <p class="text-slate-400 text-xs mb-4">Movement between the two most recent scans across all 13 factors.</p>
+    <div class="grid sm:grid-cols-3 gap-3">
+      <div class="rounded-xl p-4 border border-green-100 bg-green-50">
+        <p class="text-xs font-bold text-green-700 mb-2">🚀 Biggest gains (${gainers.length})</p>
+        ${gainers.slice(0,3).map(f=>`<div class="flex items-center justify-between mb-1.5">
+          <span class="text-sm font-medium text-slate-700 truncate mr-2">${f.fname}</span>
+          <span class="text-sm font-bold text-green-600 shrink-0">+${f.delta.toFixed(2)}</span>
+        </div>`).join('')||'<p class="text-xs text-slate-400 italic">No significant gains</p>'}
+      </div>
+      <div class="rounded-xl p-4 border border-red-100 bg-red-50">
+        <p class="text-xs font-bold text-red-700 mb-2">⚠ Watch out (${decliners.length})</p>
+        ${decliners.slice(0,3).map(f=>`<div class="flex items-center justify-between mb-1.5">
+          <span class="text-sm font-medium text-slate-700 truncate mr-2">${f.fname}</span>
+          <span class="text-sm font-bold text-red-600 shrink-0">${f.delta.toFixed(2)}</span>
+        </div>`).join('')||'<p class="text-xs text-slate-400 italic">No declines — great news</p>'}
+      </div>
+      <div class="rounded-xl p-4 border border-slate-100 bg-slate-50">
+        <p class="text-xs font-bold text-slate-500 mb-2">→ Holding steady (${stable.length})</p>
+        ${stable.slice(0,3).map(f=>`<div class="flex items-center justify-between mb-1.5">
+          <span class="text-sm font-medium text-slate-700 truncate mr-2">${f.fname}</span>
+          <span class="text-sm font-bold text-slate-400 shrink-0">${f.delta>=0?'+':''}${f.delta.toFixed(2)}</span>
+        </div>`).join('')}
+        ${stable.length>3?`<p class="text-xs text-slate-400">+${stable.length-3} more stable</p>`:''}
+      </div>
+    </div>
+  </div>`;
+
+  const ranked=rankedFactors(chainScores[0]);
+  const colHeaders=chain.map((eng,i)=>`<th class="px-3 py-3 text-center min-w-[88px]">
+    <div class="text-xs font-bold text-slate-700">${scanLabel(i)}</div>
+    <div class="text-[10px] text-slate-400 font-normal">${scanDate(eng)}</div>
+    <div class="text-[10px] text-slate-400">n=${chainResps[i].length}</div>
+  </th>`).join('');
+
+  const factorRows=ranked.map((f,rank)=>{
+    const fScores=chainScores.map(s=>s[f.pid]?.factors[f.fid]?.score??0);
+    const latestScore=fScores[fScores.length-1];
+    const mat=maturity(latestScore);
+    const col=relCol(rank,ranked.length);
+    const scoreCells=fScores.map((score,i)=>{
+      const delta=i>0?score-fScores[i-1]:null;
+      const sig=i>0?welchTest(f.fid,chainResps[i-1],chainResps[i]):null;
+      const improved=delta!=null&&delta>0.1, declined=delta!=null&&delta<-0.1;
+      const arrow=delta==null?'':improved?'↑':declined?'↓':'→';
+      const arrowCol=improved?'#059669':declined?'#dc2626':'#94a3b8';
+      const pct=(score/6)*100;
+      return `<td class="px-3 py-3 text-center align-top">
+        <div class="font-bold text-slate-800 text-sm">${score.toFixed(1)}</div>
+        <div class="h-1 bg-slate-100 rounded-full mt-1 w-10 mx-auto overflow-hidden">
+          <div class="h-full rounded-full" style="width:${pct.toFixed(0)}%;background:${i===fScores.length-1?mat.col:'#94a3b8'}"></div>
+        </div>
+        ${delta!=null?`<div class="mt-1 space-y-0.5">
+          <div class="font-bold text-sm" style="color:${arrowCol}">${arrow} ${Math.abs(delta).toFixed(2)}</div>
+          <div>${sigBadge(sig)}</div>
+        </div>`:''}
+      </td>`;
+    }).join('');
+    return `<tr class="border-b border-slate-100 hover:bg-slate-50">
+      <td class="px-4 py-3 align-top">
+        <div class="font-semibold text-slate-800 text-sm">${f.fname}</div>
+        <div class="text-xs mt-0.5" style="color:${f.pcol}">${f.pname}</div>
+      </td>
+      ${scoreCells}
+      <td class="px-3 py-3 text-center align-top"><span class="text-xs px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap" style="background:${mat.bg};color:${mat.col}">${mat.lbl}</span></td>
+      <td class="px-3 py-3 text-center align-top"><span class="text-xs px-1.5 py-0.5 rounded-full font-semibold border whitespace-nowrap" style="background:${col.bg};color:${col.tx};border-color:${col.bd}">${col.lbl}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="min-h-screen bg-slate-50">
+    <div class="bg-white border-b border-slate-200 px-5 py-4 sticky top-0 z-10">
+      <div class="max-w-5xl mx-auto flex items-center gap-3">
+        <button onclick="go('admin')" class="text-slate-400 hover:text-slate-600 text-sm">← Back</button>
+        <div><h1 class="font-bold text-slate-800 text-lg">Scan Progression — ${root.client}</h1>
+        <p class="text-slate-400 text-xs">${chain.length}-scan series</p></div>
+      </div>
+    </div>
+    <div class="max-w-5xl mx-auto p-5 space-y-5 fade">
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 text-xs text-slate-600 flex flex-wrap gap-x-5 gap-y-1">
+        <span><span class="inline-block px-1.5 py-0.5 rounded font-bold bg-blue-100 text-blue-700">★ sig.</span> p&lt;0.05</span>
+        <span><span class="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">~ near</span> p&lt;0.10</span>
+        <span class="text-slate-400">ns = not significant · hover badges for p-value &amp; Cohen's d</span>
+      </div>
+      ${momentumHTML}
+      <div><h2 class="font-bold text-slate-800 mb-3">Pillar Progression</h2>
+        <div class="grid sm:grid-cols-2 gap-3">${pillarSection}</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100">
+          <h2 class="font-bold text-slate-800">Factor-by-Factor Progression</h2>
+          <p class="text-slate-400 text-xs mt-0.5">Movement and significance between each adjacent pair of scans.</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <th class="px-4 py-3 text-left">Factor</th>${colHeaders}
+              <th class="px-3 py-3 text-center">Maturity<br/><span class="font-normal normal-case text-slate-400">(latest)</span></th>
+              <th class="px-3 py-3 text-center">Team Tier<br/><span class="font-normal normal-case text-slate-400">(original)</span></th>
+            </tr></thead>
+            <tbody>${factorRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-4">
+        <p class="text-xs font-semibold text-slate-700 mb-2">📏 Maturity Scale (absolute benchmark)</p>
+        <div class="flex flex-wrap gap-2">
+          ${['Underpower','Developing','Defined','Advanced','Exemplary'].map((lbl,i)=>{const m=maturity([1.5,2.5,3.5,4.5,5.5][i]);return `<span class="px-2 py-0.5 rounded-full text-xs font-semibold" style="background:${m.bg};color:${m.col}">${m.lbl} (${[1,2,3,4,5][i]}–${[2,3,4,5,6][i]})</span>`;}).join('')}
+        </div>
+        <p class="text-xs text-slate-400 mt-2">Team Tier is relative to this team's own score spread — not an absolute benchmark.</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleExp(id,el){
+  const body=document.getElementById(id); if(!body)return;
+  const open=body.classList.toggle('open');
+  const arrow=el.querySelector('.exp-arrow');
+  if(arrow) arrow.textContent=open?'▲':'▼';
+}
+
+/* ════════════════════════════════════════════════════════════
+   SHARE & PRINT
+════════════════════════════════════════════════════════════ */
+function shareClientLink(code){
+  const url = window.location.origin + window.location.pathname + '?view=' + encodeURIComponent(code);
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn = document.getElementById('share-btn');
+    if(btn){ btn.textContent='✅ Link copied!'; setTimeout(()=>{ btn.textContent='🔗 Share with Client'; },2500); }
+  }).catch(()=>{
+    prompt('Copy this link to share with your client:', url);
+  });
+}
+
+function openExecSummary(){
+  const eng = ACTIVE_ENG;
+  const resps = RESPONSES.filter(r => r.engId === eng.id);
+  if(!resps.length){ alert('No responses yet — nothing to export.'); return; }
+
+  const scores = computeScores(resps);
+  const ranked = rankedFactors(scores);
+  const total  = ranked.length;
+  const avgMap = stmtAvgs(resps);
+  const date   = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const shareUrl = window.location.origin + window.location.pathname + '?view=' + encodeURIComponent(eng.code);
+
+  const strengths = ranked.filter((_,i) => relCol(i,total).tier==='strength');
+  const workons   = ranked.filter((_,i) => relCol(i,total).tier==='workon').reverse();
+  const top3s = strengths.slice(0,3);
+  const top3w = workons.slice(0,3);
+
+  // ── Pillar table ──────────────────────────────────────────
+  const pillarRows = PILLARS.map(p=>{
+    const avg=scores[p.id].avg, pct=(avg/6)*100, mat=maturity(avg);
+    return `<tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:8px 10px;font-weight:600;color:#1e293b;font-size:13px"><span style="margin-right:5px">${p.em}</span>${p.name}</td>
+      <td style="padding:8px 10px;width:160px"><div style="height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct.toFixed(1)}%;background:${p.col};border-radius:4px;print-color-adjust:exact;-webkit-print-color-adjust:exact"></div></div></td>
+      <td style="padding:8px 10px;font-weight:700;color:${p.col};text-align:right;white-space:nowrap;font-size:13px">${avg.toFixed(1)}/6</td>
+      <td style="padding:8px 10px"><span style="background:${mat.bg};color:${mat.col};padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;print-color-adjust:exact;-webkit-print-color-adjust:exact">${mat.lbl}</span></td>
+    </tr>`;
+  }).join('');
+
+  // ── Strength cards (coaching questions) ───────────────────
+  const strengthCards = top3s.length ? top3s.map(f=>{
+    const mat=maturity(f.score), intv=INTV[f.fid], qs=intv?intv.r:[];
+    return `<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px 16px;margin-bottom:10px;page-break-inside:avoid;print-color-adjust:exact;-webkit-print-color-adjust:exact">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div><h3 style="margin:0;color:#166534;font-size:14px;font-weight:700">${f.fname}</h3>
+        <p style="margin:2px 0 0;font-size:11px;color:#15803d">${f.pname}</p></div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px">
+          <span style="font-size:18px;font-weight:800;color:#166534">${f.score.toFixed(1)}</span><span style="font-size:11px;color:#86efac">/6</span>
+          <div style="background:${mat.bg};color:${mat.col};padding:1px 8px;border-radius:20px;font-size:10px;font-weight:600;display:inline-block;margin-left:4px;print-color-adjust:exact;-webkit-print-color-adjust:exact">${mat.lbl}</div>
+        </div>
+      </div>
+      <p style="margin:0 0 7px;font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.07em">💭 Coaching Questions — how will you leverage this?</p>
+      <ul style="margin:0;padding:0;list-style:none">${qs.map(q=>`<li style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;color:#374151;font-style:italic"><span style="color:#4ade80;flex-shrink:0;font-style:normal;font-weight:700">?</span>${q}</li>`).join('')}</ul>
+    </div>`;
+  }).join('') : '<p style="color:#94a3b8;font-style:italic;font-size:12px">Not enough data to identify clear strengths yet.</p>';
+
+  // ── Work-on cards (coaching questions) ────────────────────
+  const workonCards = top3w.length ? top3w.map(f=>{
+    const mat=maturity(f.score), intv=INTV[f.fid], qs=intv?intv.r:[];
+    const themes=themeBreakdown(f.fid,avgMap), weakest=themes.length?themes[0]:null;
+    return `<div style="background:#fff1f2;border:1.5px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-bottom:10px;page-break-inside:avoid;print-color-adjust:exact;-webkit-print-color-adjust:exact">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div><h3 style="margin:0;color:#991b1b;font-size:14px;font-weight:700">${f.fname}</h3>
+        <p style="margin:2px 0 0;font-size:11px;color:#dc2626">${f.pname}</p></div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px">
+          <span style="font-size:18px;font-weight:800;color:#991b1b">${f.score.toFixed(1)}</span><span style="font-size:11px;color:#fca5a5">/6</span>
+          <div style="background:${mat.bg};color:${mat.col};padding:1px 8px;border-radius:20px;font-size:10px;font-weight:600;display:inline-block;margin-left:4px;print-color-adjust:exact;-webkit-print-color-adjust:exact">${mat.lbl}</div>
+        </div>
+      </div>
+      ${weakest?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:7px 10px;margin-bottom:9px"><p style="margin:0;font-size:11px;font-weight:700;color:#dc2626">🎯 Focus area: ${weakest.name} (${weakest.avg.toFixed(1)}/6)</p></div>`:''}
+      <p style="margin:0 0 7px;font-size:10px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:0.07em">💭 Coaching Questions — what needs to change?</p>
+      <ul style="margin:0;padding:0;list-style:none">${qs.map(q=>`<li style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;color:#374151;font-style:italic"><span style="color:#fca5a5;flex-shrink:0;font-style:normal;font-weight:700">?</span>${q}</li>`).join('')}</ul>
+    </div>`;
+  }).join('') : '<p style="color:#94a3b8;font-style:italic;font-size:12px">Not enough data to identify clear priorities yet.</p>';
+
+  const matBadges = [{lbl:'Underpower',col:'#dc2626',bg:'#fee2e2'},{lbl:'Developing',col:'#f97316',bg:'#ffedd5'},{lbl:'Defined',col:'#ca8a04',bg:'#fef9c3'},{lbl:'Advanced',col:'#16a34a',bg:'#dcfce7'},{lbl:'Exemplary',col:'#0369a1',bg:'#e0f2fe'}]
+    .map(m=>`<span style="background:${m.bg};color:${m.col};padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;print-color-adjust:exact;-webkit-print-color-adjust:exact">${m.lbl}</span>`).join('');
+
+  const radar = radarSVG(PILLARS,scores,190);
+
+  const footer = `<div style="margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;text-align:center;font-size:10px;color:#94a3b8">Full interactive analysis — all 13 factors, detailed breakdowns &amp; progression tracking — available at <strong style="color:#0369a1">${shareUrl}</strong><br><span style="font-size:9px;letter-spacing:.06em;color:#cbd5e1">ANDREW HALL COACHING &middot; &copy; ${new Date().getFullYear()} THE COACHING DOC LTD.</span></div>`;
+
+  const pageHeader = (title,color)=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid ${color};margin-bottom:16px">
+    <div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:2px">HPT Assessment · Executive Summary</div>
+    <h1 style="font-size:19px;font-weight:800;color:${color};margin-bottom:2px">${title}</h1>
+    <p style="color:#64748b;font-size:12px;margin:0">${eng.name} &nbsp;·&nbsp; ${eng.client}</p></div>
+    <div style="text-align:right;font-size:10px;color:#94a3b8;margin-top:2px;flex-shrink:0;margin-left:12px">andrewhallcoaching.com<br/>${date}</div>
+  </div>`;
+
+  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>HPT Executive Summary — ${eng.name}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#1e293b;background:white;font-size:13px;line-height:1.45}
+  @page{margin:14mm 13mm;size:A4}
+  @media print{.pb{page-break-before:always;padding-top:0}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+</style></head><body>
+
+<div>
+  ${pageHeader('Overview','#0369a1')}
+  <div style="display:grid;grid-template-columns:1fr 200px;gap:24px;align-items:start">
+    <div>
+      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;margin-bottom:8px">Pillar Scores</p>
+      <table style="width:100%;border-collapse:collapse"><tbody>${pillarRows}</tbody></table>
+      <div style="margin-top:12px"><p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;margin-bottom:6px">Maturity Scale</p>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${matBadges}</div></div>
+      <p style="margin-top:10px;font-size:10px;color:#94a3b8;font-style:italic">${resps.length} anonymous response${resps.length!==1?'s':''} · Developing factors not shown in this summary</p>
+    </div>
+    <div><p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#475569;margin-bottom:6px">Team Radar</p>${radar}</div>
+  </div>
+  ${footer}
+</div>
+
+<div class="pb">
+  ${pageHeader('⭐ Super Strengths','#166534')}
+  <p style="color:#64748b;font-size:12px;margin-bottom:14px">Your team's standout capabilities. Use these coaching questions to explore how to <strong>amplify and leverage</strong> these strengths further.</p>
+  ${strengthCards}
+  ${footer}
+</div>
+
+<div class="pb">
+  ${pageHeader('🎯 Priority Focus Areas','#991b1b')}
+  <p style="color:#64748b;font-size:12px;margin-bottom:14px">Your greatest opportunities for improvement. The weakest theme within each factor is highlighted. Use these questions to explore what needs to change.</p>
+  ${workonCards}
+  ${footer}
+</div>
+
+<script>window.onload=function(){window.print();}<\/script></body></html>`;
+
+  const w=window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+  else{alert('Please allow pop-ups for this site to export the PDF.');}
+}
+
+/* ════════════════════════════════════════════════════════════
+   BOOT
+════════════════════════════════════════════════════════════ */
+async function boot(){
+  if(!initSupabase()){
+    document.getElementById('app').innerHTML=setupHTML();
+    return;
+  }
+  showLoader('Connecting to database…');
+  try{
+    await loadData();
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewCode = urlParams.get('view');
+    if(viewCode){
+      const eng = ENGAGEMENTS.find(e => e.code.toUpperCase() === viewCode.toUpperCase());
+      if(eng){ ACTIVE_ENG=eng; VIEW='client'; }
+      else { showError('Results not found. Please check your link.'); return; }
+    }
+    render();
+  }catch(e){
+    showError('Could not connect to Supabase: '+e.message);
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
