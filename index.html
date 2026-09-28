@@ -347,6 +347,12 @@ let ENGAGEMENTS = [];
 let RESPONSES   = [];
 
 async function loadData(){
+  // Refresh session state in case it changed
+  if(!SESSION){
+    const { data:{ session } } = await SB.auth.getSession();
+    SESSION = session;
+  }
+  if(!SESSION) throw new Error('Not authenticated — please sign in as admin.');
   const [{ data:engs, error:e1 }, { data:resps, error:e2 }] = await Promise.all([
     SB.from('engagements').select('*').order('ts',{ascending:false}),
     SB.from('responses').select('*').order('ts',{ascending:true}),
@@ -609,8 +615,14 @@ function showError(msg){
 ════════════════════════════════════════════════════════════ */
 let VIEW='landing', ACTIVE_ENG=null;
 let SV={fi:0,ratings:{},phase:null};
+let SESSION=null; // Supabase auth session
 
 function go(view,eng){VIEW=view;if(eng!==undefined)ACTIVE_ENG=eng;render();window.scrollTo(0,0);}
+
+function goAdmin(){
+  // No prompt — use Supabase Auth instead
+  if(SESSION){ go('admin'); } else { go('login'); }
+}
 
 function render(){
   const app=document.getElementById('app');
@@ -622,6 +634,7 @@ function render(){
     case 'survey':  renderSurvey(); break;
     case 'results': app.innerHTML=resultsHTML(false); break;
     case 'client':  app.innerHTML=resultsHTML(true); break;
+    case 'login':   app.innerHTML=loginHTML(); break;
     case 'compare': app.innerHTML=compareHTML(); break;
   }
 }
@@ -631,31 +644,88 @@ async function refreshAndRender(){
 }
 
 /* ════════════════════════════════════════════════════════════
+   ADMIN LOGIN — Supabase Auth (email + password)
+════════════════════════════════════════════════════════════ */
+function loginHTML(){
+  return `<div class="min-h-screen flex items-center justify-center p-5" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)">
+    <div class="w-full max-w-sm fade">
+      <div class="text-center mb-8"><div class="text-4xl mb-3">🔐</div>
+        <h1 class="text-2xl font-bold text-white mb-1">Admin Sign In</h1>
+        <p class="text-blue-300 text-sm">Andrew Hall Coaching · HPT Tool</p></div>
+      <div class="bg-white rounded-2xl p-6 shadow-xl space-y-4">
+        <div><label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <input id="login-email" type="email" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm" placeholder="ah@andrewhallcoaching.com" autocomplete="email"/></div>
+        <div><label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+          <input id="login-pw" type="password" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"/></div>
+        <p id="login-err" class="text-red-500 text-sm hidden"></p>
+        <button onclick="doLogin()" class="w-full py-3 rounded-xl text-white font-semibold hover:opacity-90" style="background:#0369a1">Sign In →</button>
+      </div>
+      <button onclick="go(\'landing\')" class="w-full mt-4 text-blue-300 text-sm hover:text-white text-center block">← Back</button>
+    </div>
+  </div>`;
+}
+
+async function doLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-pw').value;
+  const errEl = document.getElementById('login-err');
+  if(errEl) errEl.classList.add('hidden');
+  if(!email||!pw){
+    if(errEl){ errEl.textContent='Please enter email and password.'; errEl.classList.remove('hidden'); }
+    return;
+  }
+  showLoader('Signing in\u2026');
+  try{
+    const { data, error } = await SB.auth.signInWithPassword({ email, password: pw });
+    if(error) throw error;
+    SESSION = data.session;
+    await loadData();
+    go('admin');
+  }catch(e){
+    document.getElementById('app').innerHTML = loginHTML();
+    const el = document.getElementById('login-err');
+    if(el){ el.textContent = 'Sign-in failed: ' + e.message; el.classList.remove('hidden'); }
+  }
+}
+
+async function doLogout(){
+  showLoader('Signing out\u2026');
+  await SB.auth.signOut();
+  SESSION = null;
+  ENGAGEMENTS = [];
+  RESPONSES   = [];
+  go('landing');
+}
+
+
+/* ════════════════════════════════════════════════════════════
    SETUP WIZARD
 ════════════════════════════════════════════════════════════ */
 function setupHTML(){
-  const SQL=`CREATE TABLE engagements (
+  const SQL=`-- Run security.sql instead of this snippet —
+-- it creates the tables AND the secure RLS policies.
+-- See supabase-steps.md for full instructions.
+
+CREATE TABLE IF NOT EXISTS engagements (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   client TEXT NOT NULL,
   code TEXT UNIQUE NOT NULL,
-  descs JSONB DEFAULT '{}',
+  descs JSONB DEFAULT '{}'::jsonb,
   ts TIMESTAMPTZ DEFAULT NOW(),
   parent_id TEXT REFERENCES engagements(id) ON DELETE SET NULL
 );
 
-CREATE TABLE responses (
+CREATE TABLE IF NOT EXISTS responses (
   id TEXT PRIMARY KEY,
   eng_id TEXT NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
   ratings JSONB NOT NULL,
-  ts TIMESTAMPTZ DEFAULT NOW()
+  ts DATE DEFAULT CURRENT_DATE
 );
 
 ALTER TABLE engagements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "open_eng"  ON engagements FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "open_resp" ON responses   FOR ALL USING (true) WITH CHECK (true);`;
+-- Secure RLS policies and functions are in security.sql`;
 
   return `<div class="min-h-screen flex flex-col items-center justify-center p-5" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)">
     <div class="w-full max-w-xl fade">
@@ -731,8 +801,7 @@ async function testAndSave(){
     localStorage.setItem('hpt_sb_key',key);
     SUPABASE_URL=url; SUPABASE_KEY=key;
     SB=testClient;
-    await loadData();
-    render();
+    render(); // goes to landing → admin login (loadData needs auth)
   }catch(e){
     errEl.textContent='Connection failed: '+e.message+' — check your URL and key, and make sure you ran the SQL migration.';
     errEl.classList.remove('hidden');
@@ -765,7 +834,7 @@ function landingHTML(){
           </div>
           <p id="serr" class="text-red-500 text-sm mt-2 hidden"></p>
         </div>
-        <button onclick="go('admin')" class="w-full rounded-2xl p-5 text-left hover:opacity-90 border border-white/20" style="background:rgba(255,255,255,.1)">
+        <button onclick="goAdmin()" class="w-full rounded-2xl p-5 text-left hover:opacity-90 border border-white/20" style="background:rgba(255,255,255,.1)">
           <div class="flex items-center justify-between">
             <div><h2 class="font-semibold text-white text-lg mb-0.5">🔐 Admin Panel</h2>
             <p class="text-blue-200 text-sm">Create engagements &amp; view results</p></div>
@@ -795,12 +864,26 @@ function landingHTML(){
   </div>`;
 }
 
-function startSurvey(){
+async function startSurvey(){
   const code=document.getElementById('scode').value.toUpperCase().trim();
-  const eng=ENGAGEMENTS.find(e=>e.code===code);
-  if(!eng){const el=document.getElementById('serr');el.textContent='Code not found. Please check with your facilitator.';el.classList.remove('hidden');return;}
-  SV={fi:0,ratings:{},phase:null};
-  go('survey',eng);
+  if(!code) return;
+  const errEl=document.getElementById('serr');
+  if(errEl) errEl.classList.add('hidden');
+  showLoader('Looking up your survey…');
+  try{
+    const { data, error }=await SB.rpc('lookup_engagement_by_code',{p_code:code});
+    if(error) throw error;
+    if(!data||!data.length){
+      document.getElementById('app').innerHTML=landingHTML();
+      const el=document.getElementById('serr');
+      if(el){el.textContent='Code not found. Please check with your facilitator.';el.classList.remove('hidden');}
+      return;
+    }
+    const eng={...data[0],parentId:null};
+    ACTIVE_ENG=eng;
+    SV={fi:0,ratings:{},phase:null};
+    go('survey',eng);
+  }catch(e){ showError('Survey lookup failed: '+e.message); }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -846,6 +929,7 @@ function adminHTML(){
       <div class="flex items-center gap-2">
         <button onclick="refreshAndRender()" class="px-3 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">↻ Refresh</button>
         <button onclick="go('create')" class="px-4 py-2 rounded-xl text-white font-medium text-sm hover:opacity-90" style="background:#0369a1">+ New Engagement</button>
+        <button onclick="doLogout()" class="px-3 py-2 rounded-xl text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100">Sign Out</button>
       </div>
     </div>
     <div class="max-w-3xl mx-auto p-5 space-y-4">${cards}</div>
@@ -876,8 +960,8 @@ async function delEng(id){
 async function createRescan(parentId){
   const parent=ENGAGEMENTS.find(e=>e.id===parentId);
   if(!parent) return;
-  const prefix=parent.client.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||'HPT';
-  const code=prefix+Math.floor(1000+Math.random()*9000);
+  const _cb=new Uint8Array(18);crypto.getRandomValues(_cb);
+  const code=[..._cb].map(b=>'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%36]).join('').slice(0,12);
   const chain=buildChain(chainRootId(parentId));
   const baseName=parent.name.replace(/ \(Re-scan \d+\)$/,'');
   const scanNum=chain.length;
@@ -960,8 +1044,8 @@ function ce1next(){
 }
 async function ce2create(){
   ALL_FACTORS.forEach(f=>{const el=document.getElementById('desc-'+f.id);if(el)CE.descs[f.id]=el.value.trim()||f.def;});
-  const prefix=CE.client.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||'HPT';
-  const code=prefix+Math.floor(1000+Math.random()*9000);
+  const _ca=new Uint8Array(18);crypto.getRandomValues(_ca);
+  const code=[..._ca].map(b=>'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%36]).join('').slice(0,12);
   const eng={id:Date.now().toString(),name:CE.name,client:CE.client,code,descs:{...CE.descs},ts:new Date().toISOString()};
   showLoader('Creating engagement…');
   try{
@@ -1073,10 +1157,9 @@ async function svNext(){
   else{
     showLoader('Saving your responses…');
     try{
-      const resp={id:Date.now().toString(),eng_id:ACTIVE_ENG.id,ratings:{...SV.ratings},ts:new Date().toISOString()};
+      const resp={id:Date.now().toString(),eng_id:ACTIVE_ENG.id,ratings:{...SV.ratings},ts:new Date().toISOString().split('T')[0]};
       await SB.from('responses').insert([resp]);
-      await loadData();
-      SV.phase='done'; renderSurvey();
+      SV.phase='done'; renderSurvey(); // anon does not call loadData()
     }catch(e){ showError('Could not save your response: '+e.message+'. Please try again.'); }
   }
 }
@@ -1620,15 +1703,33 @@ async function boot(){
     document.getElementById('app').innerHTML=setupHTML();
     return;
   }
-  showLoader('Connecting to database…');
+  showLoader('Connecting…');
+
+  // ── Public client results link: ?view=SURVEYCODE ──────────
+  const urlParams=new URLSearchParams(window.location.search);
+  const viewCode=urlParams.get('view');
+  if(viewCode){
+    try{
+      const { data, error }=await SB.rpc('get_results_for_code',{p_code:viewCode});
+      if(error) throw error;
+      if(!data){ showError('Results not found. Please check your link.'); return; }
+      const engData=typeof data==='string'?JSON.parse(data):data;
+      ACTIVE_ENG=normaliseEng(engData);
+      RESPONSES=(engData.responses||[]).map(normaliseResp);
+      ENGAGEMENTS=[ACTIVE_ENG];
+      VIEW='client'; render(); return;
+    }catch(e){ showError('Could not load results: '+e.message); return; }
+  }
+
+  // ── Admin auto-login (if session exists from previous visit) ─
   try{
-    await loadData();
-    const urlParams = new URLSearchParams(window.location.search);
-    const viewCode = urlParams.get('view');
-    if(viewCode){
-      const eng = ENGAGEMENTS.find(e => e.code.toUpperCase() === viewCode.toUpperCase());
-      if(eng){ ACTIVE_ENG=eng; VIEW='client'; }
-      else { showError('Results not found. Please check your link.'); return; }
+    const { data:{ session } }=await SB.auth.getSession();
+    SESSION=session;
+    if(SESSION){
+      await loadData();
+      VIEW='admin';
+    } else {
+      VIEW='landing';
     }
     render();
   }catch(e){
